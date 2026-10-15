@@ -1,0 +1,6 @@
+aiogram>=3.13,<4
+aiofiles>=24.1
+opentele>=1.15.1
+python-dotenv>=1.0
+telethon>=1.45
+tgcrypto>=1.2.5
