@@ -23,6 +23,8 @@ def looks_like_tdata_dir(path: Path) -> bool:
 
 def normalize_extract_root(base: Path) -> Path:
     """Если в архиве одна обёртка-папка — зайти внутрь (частый случай при zip)."""
+    if not base.exists():
+        return base
     current = base.resolve()
     while True:
         if looks_like_tdata_dir(current) or (current / "tdata").is_dir():
