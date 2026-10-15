@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -25,7 +26,14 @@ def _extract_archive(archive_path: Path, dest: Path) -> Path:
         with zipfile.ZipFile(archive_path, "r") as zf:
             zf.extractall(dest)
         return dest
-    raise ValueError("Нужен ZIP-архив с папкой tdata внутри")
+    if tarfile.is_tarfile(archive_path):
+        with tarfile.open(archive_path, "r:*") as tf:
+            tf.extractall(dest)
+        return dest
+    raise ValueError(
+        "Нужен ZIP или TAR с папкой tdata из Telegram Desktop "
+        "(файл key_datas и каталоги с hex-именами)."
+    )
 
 
 async def run_bot(*, verbose: bool = False) -> None:
@@ -46,7 +54,7 @@ async def run_bot(*, verbose: bool = False) -> None:
         await message.answer(
             "Привет! Я обрабатываю tdata:\n"
             "1️⃣ Отправь ссылку на пост канала (куда переводить звёзды).\n"
-            "2️⃣ Отправь ZIP с папкой <code>tdata</code> из Telegram Desktop.\n\n"
+            "2️⃣ Отправь ZIP с папкой <code>tdata</code> (или содержимым tdata — key_datas и т.д.).\n\n"
             "Команды:\n"
             "/cancel — отмена\n"
             "/status — текущие настройки из .env",

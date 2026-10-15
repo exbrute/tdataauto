@@ -7,21 +7,11 @@ from opentele.api import API, UseCurrentSession
 from opentele.td import TDesktop
 from opentele.tl import TelegramClient
 
+from tdataauto.core.tdata_paths import find_tdata_root
+
 logger = logging.getLogger(__name__)
 
-
-def find_tdata_root(base: Path) -> Path:
-    """Найти папку tdata внутри распакованного архива или указанного пути."""
-    base = base.resolve()
-    if base.name.lower() == "tdata" and base.is_dir():
-        return base
-    candidate = base / "tdata"
-    if candidate.is_dir():
-        return candidate
-    for path in base.rglob("tdata"):
-        if path.is_dir() and any(path.iterdir()):
-            return path
-    raise FileNotFoundError(f"Папка tdata не найдена в {base}")
+__all__ = ["find_tdata_root", "client_from_tdata"]
 
 
 async def client_from_tdata(
