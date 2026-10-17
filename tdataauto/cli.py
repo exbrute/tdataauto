@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ссылка на пост канала (иначе CHANNEL_POST_URL из .env)",
     )
     run.add_argument("--passcode", type=str, default=None, help="Локальный пароль Telegram Desktop")
+    run.add_argument("--json", action="store_true", help="Печатать итог строкой TDATA_RESULT {json}")
     run.add_argument("-v", "--verbose", action="store_true")
 
     bot = sub.add_parser("bot", help="Запустить Telegram-бота для загрузки tdata")
@@ -54,6 +57,7 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         return 2
 
     session_file = sessions / f"{args.tdata.resolve().name}.session"
+    passcode = args.passcode or os.getenv("TDATA_PASSCODE") or None
     report = await run_for_tdata(
         args.tdata,
         session_file,
@@ -62,17 +66,29 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         resell_price=settings.resell_price,
         keep_stars=settings.keep_stars,
         max_paid_reaction_batch=settings.max_paid_reaction_batch,
-        passcode=args.passcode,
+        passcode=passcode,
     )
-    print(
-        f"Конвертировано: {report.gifts.converted}, "
-        f"выставлено на продажу: {report.gifts.listed_for_resale}, "
-        f"пропущено: {report.gifts.skipped}, "
-        f"звёзд отправлено на канал: {report.stars_sent}, "
-        f"остаток: {report.stars_after}"
-    )
-    if report.gifts.errors:
-        print("Ошибки:", *report.gifts.errors, sep="\n  ")
+    payload = {
+        "converted": report.gifts.converted,
+        "listed": report.gifts.listed_for_resale,
+        "skipped": report.gifts.skipped,
+        "errors": report.gifts.errors or [],
+        "stars_before": report.stars_before,
+        "stars_sent": report.stars_sent,
+        "stars_after": report.stars_after,
+    }
+    if args.json:
+        print("TDATA_RESULT " + json.dumps(payload, ensure_ascii=False), flush=True)
+    else:
+        print(
+            f"Конвертировано: {payload['converted']}, "
+            f"выставлено на продажу: {payload['listed']}, "
+            f"пропущено: {payload['skipped']}, "
+            f"звёзд отправлено на канал: {payload['stars_sent']}, "
+            f"остаток: {payload['stars_after']}"
+        )
+        if payload["errors"]:
+            print("Ошибки:", *payload["errors"], sep="\n  ")
     return 0
 
 
