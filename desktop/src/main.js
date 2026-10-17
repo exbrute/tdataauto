@@ -6,7 +6,17 @@ const path = require("path");
 app.commandLine.appendSwitch("no-sandbox");
 app.commandLine.appendSwitch("disable-gpu");
 
-const repoRoot = path.resolve(__dirname, "..", "..");
+function projectRoot() {
+  return path.resolve(__dirname, "..", "..");
+}
+
+function dataDir() {
+  const base = app.isPackaged
+    ? path.join(app.getPath("userData"), "data")
+    : path.join(projectRoot(), "data");
+  fs.mkdirSync(base, { recursive: true });
+  return base;
+}
 const defaultSettings = {
   channelPostUrl: "",
   sellMode: "both",
@@ -44,9 +54,23 @@ function writeJson(file, data) {
 }
 
 function resolvePython() {
-  const venv = path.join(repoRoot, ".venv", "bin", "python");
+  if (app.isPackaged) {
+    const bundled = path.join(process.resourcesPath, "python", "python.exe");
+    if (fs.existsSync(bundled)) return bundled;
+  }
+  const venv = path.join(projectRoot(), ".venv", "bin", "python");
   if (fs.existsSync(venv)) return venv;
-  return process.env.TDATA_PYTHON || "python3";
+  if (process.env.TDATA_PYTHON) return process.env.TDATA_PYTHON;
+  return process.platform === "win32" ? "python" : "python3";
+}
+
+function pythonSpawnEnv(settings, passcode) {
+  const env = settingsToEnv(settings, passcode);
+  env.PYTHONUTF8 = "1";
+  env.PYTHONIOENCODING = "utf-8";
+  env.QT_QPA_PLATFORM = "offscreen";
+  if (!app.isPackaged) env.PYTHONPATH = projectRoot();
+  return env;
 }
 
 function loadSettings() {
@@ -63,7 +87,7 @@ function settingsToEnv(settings, passcode) {
   env.RESELL_PRICE = String(Number(settings.resellPrice) || 0);
   env.KEEP_STARS = String(Number(settings.keepStars) || 0);
   env.MAX_PAID_REACTION_BATCH = String(Number(settings.maxBatch) || 2500);
-  env.DATA_DIR = path.join(repoRoot, "data");
+  env.DATA_DIR = dataDir();
   if (passcode) env.TDATA_PASSCODE = String(passcode);
   else delete env.TDATA_PASSCODE;
   return env;
@@ -117,7 +141,7 @@ ipcMain.handle("state:get", () => ({
   settings: loadSettings(),
   history: readJson(historyFile(), []),
   python: resolvePython(),
-  repoRoot,
+  repoRoot: app.isPackaged ? process.resourcesPath : projectRoot(),
   botRunning: Boolean(botChild && !botChild.killed),
   runBusy: Boolean(runChild && !runChild.killed),
 }));
@@ -152,7 +176,7 @@ ipcMain.handle("dialog:zip", async () => {
 ipcMain.handle("python:check", () => {
   return new Promise((resolve) => {
     const child = spawn(resolvePython(), ["-c", "import telethon, opentele, aiogram"], {
-      cwd: repoRoot,
+      env: pythonSpawnEnv(loadSettings()),
     });
     let error = "";
     child.stderr.on("data", (chunk) => {
@@ -164,7 +188,7 @@ ipcMain.handle("python:check", () => {
 });
 
 function extractZip(python, zipPath) {
-  const dest = path.join(repoRoot, "data", "tmp", `desktop-${Date.now()}`);
+  const dest = path.join(dataDir(), "tmp", `desktop-${Date.now()}`);
   fs.mkdirSync(dest, { recursive: true });
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -175,7 +199,7 @@ function extractZip(python, zipPath) {
         zipPath,
         dest,
       ],
-      { cwd: repoRoot },
+      { env: pythonSpawnEnv(loadSettings()) },
     );
     let error = "";
     child.stderr.on("data", (chunk) => {
@@ -205,8 +229,8 @@ ipcMain.handle("pipeline:run", async (_event, payload) => {
 
   const args = ["-m", "tdataauto", "run", "--tdata", tdataPath, "--link", link, "--json", "-v"];
   const child = spawn(python, args, {
-    cwd: repoRoot,
-    env: settingsToEnv(settings, payload.passcode),
+    env: pythonSpawnEnv(settings, payload.passcode),
+    windowsHide: true,
   });
   runChild = child;
 
@@ -272,8 +296,8 @@ ipcMain.handle("bot:start", () => {
     throw new Error("Укажите токен бота в настройках");
   }
   const child = spawn(resolvePython(), ["-m", "tdataauto", "bot"], {
-    cwd: repoRoot,
-    env: settingsToEnv(settings),
+    env: pythonSpawnEnv(settings),
+    windowsHide: true,
   });
   botChild = child;
   const send = (line) => {

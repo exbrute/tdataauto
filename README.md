@@ -71,6 +71,16 @@ npm start
 
 Окно повторяет тёмную панель: карточки метрик, тепловая карта запусков, график звёзд и таблица аккаунтов. Python-пакет `tdataauto` остаётся движком — приложение вызывает `python -m tdataauto run`.
 
+Готовый Windows-файл собирается так:
+
+```bash
+cd desktop
+npm install
+npm run dist:win
+```
+
+На выходе `desktop/dist/StarFlow-0.1.0.exe`. Внутри уже есть Python, отдельно ставить его не нужно.
+
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).

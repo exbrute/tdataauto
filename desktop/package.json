@@ -4,13 +4,45 @@
   "private": true,
   "description": "Desktop app for selling Telegram gifts from tdata and sending Stars to a channel post",
   "main": "src/main.js",
+  "author": "tdataauto",
   "scripts": {
-    "start": "electron . --no-sandbox"
+    "start": "electron . --no-sandbox",
+    "bundle:python": "bash scripts/bundle-python-win.sh",
+    "dist:win": "bash scripts/bundle-python-win.sh && electron-builder --win portable"
   },
   "devDependencies": {
-    "electron": "^33.4.11"
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.2.5"
+  },
+  "build": {
+    "appId": "app.starflow.desktop",
+    "productName": "Star Flow",
+    "executableName": "StarFlow",
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "node_modules/@fontsource/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build/python-win",
+        "to": "python"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "StarFlow-${version}.exe"
+    }
   }
 }
