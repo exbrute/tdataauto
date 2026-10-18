@@ -45,10 +45,6 @@
             <svg viewBox="0 0 24 24"><path d="M8 7h11M8 12h11M8 17h11"/><path d="M4 7h.01M4 12h.01M4 17h.01"/></svg>
             Логи
           </button>
-          <button class="nav-btn" data-view="admins" type="button">
-            <svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.2 2.8 7.4 7 9 4.2-1.6 7-4.8 7-9V6l-7-3Z"/><path d="M9 12.2 11 14l4-4"/></svg>
-            Админки
-          </button>
           <button class="nav-btn" data-view="extra" type="button">
             <svg viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/></svg>
             Дополнительно
@@ -185,11 +181,11 @@
         <section class="view" id="view-sessions" hidden>
           <article class="card">
             <div class="card-head">
-              <h2>Сессии Telethon</h2>
-              <button class="link" type="button" id="refresh-sessions">Обновить</button>
+              <h2>Загруженные аккаунты</h2>
+              <button class="link" type="button" id="refresh-sessions">Пересканировать всё</button>
             </div>
-            <p class="muted">Файлы появляются после обработки tdata. Удаление стирает только локальную сессию на этом компьютере.</p>
-            <div class="stack" id="session-list"></div>
+            <p class="muted">При добавлении tdata в пул профиль сканируется автоматически: звёзды, NFT, админ-чаты/каналы, Premium и боты из @BotFather.</p>
+            <div class="table-wrap" id="sessions-table"></div>
           </article>
         </section>
 
@@ -251,33 +247,6 @@
             <p class="muted">Сводка по всем запускам: загруженные аккаунты, списанные звёзды, NFT на витрине и конвертированные подарки.</p>
             <pre id="logs-console"></pre>
           </article>
-        </section>
-
-        <section class="view" id="view-admins" hidden>
-          <div class="split">
-            <article class="card form-card">
-              <h2>Скан админ-чатов</h2>
-              <p class="muted">Показывает каналы и чаты, где сессия из tdata состоит и имеет права администратора (или создатель).</p>
-              <label class="field">tdata из пула
-                <select id="admin-pool-select"><option value="">— выберите —</option></select>
-              </label>
-              <label class="field">Локальный пароль tdata
-                <input id="admin-pass" type="password" placeholder="Если задан passcode в Telegram Desktop" />
-              </label>
-              <label class="field">Прокси
-                <select id="admin-proxy"><option value="">Без прокси</option></select>
-              </label>
-              <button class="btn primary" type="button" id="scan-admins-btn">Сканировать</button>
-              <p class="muted" id="admin-scan-state">Ожидание</p>
-            </article>
-            <article class="card">
-              <div class="card-head">
-                <h2>Чаты с админ-правами</h2>
-                <span class="muted" id="admin-account-label"></span>
-              </div>
-              <div class="table-wrap" id="admin-chats-table"></div>
-            </article>
-          </div>
         </section>
 
         <section class="view" id="view-extra" hidden>

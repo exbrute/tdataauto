@@ -31,6 +31,7 @@ const defaultSettings = {
 let mainWindow = null;
 let runChild = null;
 let botChild = null;
+let pythonJobChain = Promise.resolve();
 
 function settingsFile() {
   return path.join(app.getPath("userData"), "settings.json");
@@ -50,8 +51,19 @@ function loadLibrary() {
     pool: Array.isArray(data.pool) ? data.pool : [],
     folders: Array.isArray(data.folders) ? data.folders : [],
     proxies: Array.isArray(data.proxies) ? data.proxies : [],
-    adminScans: Array.isArray(data.adminScans) ? data.adminScans : [],
   };
+}
+
+function sendPoolUpdated(library) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pool:updated", library);
+  }
+}
+
+function enqueuePythonJob(task) {
+  const job = pythonJobChain.then(task);
+  pythonJobChain = job.catch(() => {});
+  return job;
 }
 
 function listSessionFiles() {
@@ -180,7 +192,6 @@ ipcMain.handle("library:save", (_event, library) => {
     pool: Array.isArray(library.pool) ? library.pool : [],
     folders: Array.isArray(library.folders) ? library.folders : [],
     proxies: Array.isArray(library.proxies) ? library.proxies : [],
-    adminScans: Array.isArray(library.adminScans) ? library.adminScans : [],
   };
   writeJson(libraryFile(), next);
   return next;
@@ -336,7 +347,7 @@ function pushHistory(entry) {
   return done;
 }
 
-ipcMain.handle("pipeline:run-batch", async (_event, payload) => {
+async function runBatchJob(payload) {
   const settings = { ...loadSettings(), ...(payload.settings || {}) };
   const link = String(payload.link || settings.channelPostUrl || "").trim();
   if (!link) throw new Error("Укажите ссылку на пост канала");
@@ -373,36 +384,59 @@ ipcMain.handle("pipeline:run-batch", async (_event, payload) => {
     error: result ? "" : "Пакетная обработка завершилась с ошибкой. Смотрите журнал.",
   };
   return pushHistory(entry);
-});
+}
 
-ipcMain.handle("admins:scan", async (_event, payload) => {
+async function inspectPoolEntry(payload) {
   const settings = loadSettings();
-  const rawPath = String(payload.tdataPath || "").trim();
-  if (!rawPath) throw new Error("Выберите tdata из пула");
+  const poolId = String(payload.poolId || "");
+  const library = loadLibrary();
+  const entry = library.pool.find((item) => item.id === poolId);
+  if (!entry) throw new Error("Запись пула не найдена");
+
+  entry.scanStatus = "scanning";
+  entry.scanError = "";
+  writeJson(libraryFile(), library);
+  sendPoolUpdated(library);
 
   const python = resolvePython();
-  const tdataPath = await resolveTdataInput(rawPath, python);
-  const args = ["-m", "tdataauto", "scan-admins", "--tdata", tdataPath, "--json", "-v"];
-  const { code, stdout } = await runPythonModule(
+  const tdataPath = await resolveTdataInput(entry.path, python);
+  const args = ["-m", "tdataauto", "inspect-account", "--tdata", tdataPath, "--json", "-v"];
+  const { stdout } = await runPythonModule(
     args,
     settings,
     payload.passcode,
     payload.proxyUrl,
   );
-  const result = parseJsonMarker(stdout, "TDATA_ADMIN_CHATS");
-  const scan = {
-    id: String(Date.now()),
-    at: new Date().toISOString(),
-    tdataPath: rawPath,
-    account: result?.account || null,
-    chats: result?.chats || [],
-    ok: code === 0 && Boolean(result),
-  };
-  const library = loadLibrary();
-  library.adminScans.unshift(scan);
-  library.adminScans = library.adminScans.slice(0, 50);
+  const profile = parseJsonMarker(stdout, "TDATA_ACCOUNT_PROFILE");
+  entry.profile = profile || null;
+  entry.scanStatus = profile ? "ready" : "error";
+  entry.scanError = profile ? "" : "Не удалось получить профиль (проверьте passcode и прокси)";
+  entry.scannedAt = profile?.scanned_at || new Date().toISOString();
   writeJson(libraryFile(), library);
-  return { scan, library };
+  sendPoolUpdated(library);
+  return { poolId, profile, library };
+}
+
+ipcMain.handle("pipeline:run-batch", (_event, payload) =>
+  enqueuePythonJob(() => runBatchJob(payload)),
+);
+
+ipcMain.handle("pool:inspect", (_event, payload) =>
+  enqueuePythonJob(() => inspectPoolEntry(payload)),
+);
+
+ipcMain.handle("pool:inspect-all", async (_event, payload) => {
+  const library = loadLibrary();
+  for (const item of library.pool) {
+    await enqueuePythonJob(() =>
+      inspectPoolEntry({
+        poolId: item.id,
+        passcode: payload.passcode,
+        proxyUrl: payload.proxyUrl,
+      }),
+    );
+  }
+  return loadLibrary();
 });
 
 ipcMain.handle("bot:start", () => {

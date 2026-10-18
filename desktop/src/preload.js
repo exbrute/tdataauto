@@ -13,7 +13,8 @@ contextBridge.exposeInMainWorld("desktop", {
   pickZip: () => ipcRenderer.invoke("dialog:zip"),
   checkPython: () => ipcRenderer.invoke("python:check"),
   runBatch: (payload) => ipcRenderer.invoke("pipeline:run-batch", payload),
-  scanAdmins: (payload) => ipcRenderer.invoke("admins:scan", payload),
+  inspectPool: (payload) => ipcRenderer.invoke("pool:inspect", payload),
+  inspectPoolAll: (payload) => ipcRenderer.invoke("pool:inspect-all", payload),
   startBot: () => ipcRenderer.invoke("bot:start"),
   stopBot: () => ipcRenderer.invoke("bot:stop"),
   clearHistory: () => ipcRenderer.invoke("history:clear"),
@@ -26,6 +27,7 @@ contextBridge.exposeInMainWorld("desktop", {
   close: () => ipcRenderer.invoke("window:close"),
   onLog: (callback) => subscribe("pipeline:log", callback),
   onDone: (callback) => subscribe("pipeline:done", callback),
+  onPoolUpdated: (callback) => subscribe("pool:updated", callback),
   onBotLog: (callback) => subscribe("bot:log", callback),
   onBotStatus: (callback) => subscribe("bot:status", callback),
 });

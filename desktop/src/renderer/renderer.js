@@ -2,7 +2,7 @@ const state = {
   view: "accounts",
   settings: {},
   history: [],
-  library: { pool: [], folders: [], proxies: [], adminScans: [] },
+  library: { pool: [], folders: [], proxies: [] },
   sessions: [],
   running: false,
   botRunning: false,
@@ -299,15 +299,67 @@ function renderAccounts() {
   $("accounts-table").innerHTML = tableHtml(filteredHistory());
 }
 
+function inspectProxyUrl() {
+  const proxy = state.library.proxies.find((item) => item.id === $("run-proxy").value);
+  return proxy ? proxyUrl(proxy) : "";
+}
+
+function sessionStatusLabel(item) {
+  if (item.scanStatus === "scanning") return "Сканирование…";
+  if (item.scanStatus === "error") return item.scanError || "Ошибка";
+  if (item.profile) return "Готово";
+  return "В очереди";
+}
+
 function renderSessions() {
-  const items = state.sessions.filter((item) => matchesQuery(item.name));
-  $("session-list").innerHTML = items.length
-    ? items
-        .map(
-          (item) => `<div class="list-row"><div><b>${escapeHtml(item.name)}</b><span>${Math.max(1, Math.ceil(item.size / 1024))} КБ · ${new Date(item.mtime).toLocaleString("ru-RU")}</span></div><button class="btn small danger" type="button" data-action="delete-session" data-name="${escapeHtml(item.name)}">Удалить</button></div>`,
-        )
-        .join("")
-    : `<p class="muted">Сессий пока нет. Они появляются после обработки tdata.</p>`;
+  const pool = (state.library.pool || []).filter((item) => {
+    const p = item.profile;
+    const haystack = [
+      poolLabel(item.path),
+      item.path,
+      p?.account?.name,
+      p?.account?.username,
+      ...(p?.bots || []).map((bot) => bot.username),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return matchesQuery(haystack);
+  });
+  const table = $("sessions-table");
+  if (!table) return;
+  if (!pool.length) {
+    table.innerHTML = `<table><tr><td>Нет загруженных tdata. Добавьте их на вкладке «Аккаунты».</td></tr></table>`;
+    return;
+  }
+  const body = pool
+    .map((item) => {
+      const p = item.profile;
+      const acc = p?.account || {};
+      const gifts = p?.gifts || {};
+      const bots = (p?.bots || []).map((bot) => `@${bot.username}`).join(", ") || "—";
+      const username = acc.username ? `@${acc.username}` : "—";
+      return `<tr>
+        <td class="name">${escapeHtml(poolLabel(item.path))}</td>
+        <td>${escapeHtml(acc.name || "—")}</td>
+        <td>${escapeHtml(username)}</td>
+        <td>${acc.premium ? "Да" : p ? "Нет" : "—"}</td>
+        <td>${p ? money(p.stars) : "—"}</td>
+        <td>${p ? money(gifts.nft || 0) : "—"}</td>
+        <td>${p ? money(p.admin_chats || 0) : "—"}</td>
+        <td>${p ? money(p.admin_channels || 0) : "—"}</td>
+        <td>${escapeHtml(bots)}</td>
+        <td>${escapeHtml(sessionStatusLabel(item))}</td>
+        <td><button class="btn small" type="button" data-action="rescan-pool" data-id="${escapeHtml(item.id)}">↻</button></td>
+      </tr>`;
+    })
+    .join("");
+  table.innerHTML = `<table>
+    <thead><tr>
+      <th>TDATA</th><th>ИМЯ</th><th>USERNAME</th><th>PREMIUM</th><th>⭐</th><th>NFT</th>
+      <th>АДМ. ЧАТЫ</th><th>АДМ. КАНАЛЫ</th><th>БОТЫ</th><th>СТАТУС</th><th></th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
 }
 
 function renderFolders() {
@@ -347,64 +399,6 @@ function renderPool() {
         )
         .join("")
     : `<p class="muted">Пул пуст. Добавьте папку или ZIP.</p>`;
-}
-
-function fillAdminPoolSelect() {
-  const pool = state.library.pool || [];
-  const select = $("admin-pool-select");
-  const current = select.value;
-  select.innerHTML = [`<option value="">— выберите —</option>`]
-    .concat(pool.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(poolLabel(item.path))}</option>`))
-    .join("");
-  if ([...select.options].some((option) => option.value === current)) select.value = current;
-}
-
-function fillAdminProxySelect() {
-  const select = $("admin-proxy");
-  const current = select.value;
-  select.innerHTML = [`<option value="">Без прокси</option>`]
-    .concat(
-      state.library.proxies.map(
-        (item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || `${item.host}:${item.port}`)}</option>`,
-      ),
-    )
-    .join("");
-  if ([...select.options].some((option) => option.value === current)) select.value = current;
-}
-
-function renderAdminChats() {
-  const scans = state.library.adminScans || [];
-  const scan = scans[0];
-  if (!scan) {
-    $("admin-account-label").textContent = "";
-    $("admin-chats-table").innerHTML = `<table><tr><td>Сканирований пока нет. Выберите tdata и нажмите «Сканировать».</td></tr></table>`;
-    return;
-  }
-  const acc = scan.account;
-  $("admin-account-label").textContent = acc
-    ? `${acc.name || ""} ${acc.username ? `@${acc.username}` : ""} · id ${acc.id} · ${new Date(scan.at).toLocaleString("ru-RU")}`
-    : new Date(scan.at).toLocaleString("ru-RU");
-  const chats = (scan.chats || []).filter((chat) =>
-    matchesQuery(`${chat.title} ${chat.username || ""} ${chat.type}`),
-  );
-  if (!chats.length) {
-    $("admin-chats-table").innerHTML = `<table><tr><td>${scan.ok ? "Админ-чатов не найдено." : "Скан не удался — смотрите журнал на «Аккаунтах»."}</td></tr></table>`;
-    return;
-  }
-  const body = chats
-    .map(
-      (chat) => `<tr>
-        <td class="name">${escapeHtml(chat.title)}</td>
-        <td>${escapeHtml(chat.type)}</td>
-        <td>${chat.username ? `@${escapeHtml(chat.username)}` : escapeHtml(String(chat.id))}</td>
-        <td>${escapeHtml(chat.rights)}</td>
-      </tr>`,
-    )
-    .join("");
-  $("admin-chats-table").innerHTML = `<table>
-    <thead><tr><th>НАЗВАНИЕ</th><th>ТИП</th><th>ID / USER</th><th>ПРАВА</th></tr></thead>
-    <tbody>${body}</tbody>
-  </table>`;
 }
 
 function renderLogsConsole() {
@@ -464,9 +458,6 @@ function renderLists() {
   renderFolders();
   renderProxies();
   renderPool();
-  fillAdminPoolSelect();
-  fillAdminProxySelect();
-  renderAdminChats();
 }
 
 function fillProxySelect() {
@@ -568,17 +559,42 @@ function appendLog(id, line) {
   node.scrollTop = node.scrollHeight;
 }
 
+async function inspectPoolItem(poolId) {
+  const { library } = await window.desktop.inspectPool({
+    poolId,
+    passcode: $("run-pass").value,
+    proxyUrl: inspectProxyUrl(),
+  });
+  state.library = library;
+  renderLists();
+}
+
+async function scheduleMissingPoolScans() {
+  for (const item of state.library.pool || []) {
+    if (!item.profile && item.scanStatus !== "scanning") {
+      inspectPoolItem(item.id).catch((error) => appendLog("log", error.message || String(error)));
+    }
+  }
+}
+
 async function addToPool(filePath) {
   const path = String(filePath || "").trim();
   if (!path) return;
   if (!state.library.pool) state.library.pool = [];
-  if (state.library.pool.some((item) => item.path === path)) return;
-  state.library.pool.unshift({
+  const existing = state.library.pool.find((item) => item.path === path);
+  if (existing) {
+    inspectPoolItem(existing.id).catch((error) => appendLog("log", error.message || String(error)));
+    return;
+  }
+  const entry = {
     id: String(Date.now()) + Math.random().toString(36).slice(2, 6),
     path,
     addedAt: new Date().toISOString(),
-  });
+    scanStatus: "pending",
+  };
+  state.library.pool.unshift(entry);
   await persistLibrary();
+  inspectPoolItem(entry.id).catch((error) => appendLog("log", error.message || String(error)));
 }
 
 async function boot() {
@@ -594,8 +610,8 @@ async function boot() {
   state.history = snapshot.history || [];
   state.library = snapshot.library || state.library;
   if (!Array.isArray(state.library.pool)) state.library.pool = [];
-  if (!Array.isArray(state.library.adminScans)) state.library.adminScans = [];
   delete state.library.admins;
+  delete state.library.adminScans;
   state.sessions = snapshot.sessions || [];
   state.botRunning = snapshot.botRunning;
   fillForms();
@@ -610,6 +626,7 @@ async function boot() {
   $("python-status").textContent = python.ok
     ? `Python готов: ${snapshot.python}`
     : `Python-зависимости не найдены. Выполните pip install -r requirements.txt. ${python.error || ""}`;
+  scheduleMissingPoolScans();
 }
 
 document.querySelectorAll(".nav-btn").forEach((button) => {
@@ -698,9 +715,17 @@ $("run-btn").addEventListener("click", async () => {
       settings: state.settings,
     });
     state.history = done.history;
-    state.sessions = await window.desktop.listSessions();
     renderAll();
     $("run-state").textContent = done.entry.ok ? "Готово" : "Ошибка";
+    if (done.entry.ok) {
+      window.desktop
+        .inspectPoolAll({ passcode: $("run-pass").value, proxyUrl: inspectProxyUrl() })
+        .then((library) => {
+          state.library = library;
+          renderLists();
+        })
+        .catch((error) => appendLog("log", error.message || String(error)));
+    }
   } catch (error) {
     appendLog("log", error.message || String(error));
     $("run-state").textContent = "Ошибка";
@@ -736,8 +761,15 @@ $("clear-history").addEventListener("click", async () => {
 $("bell").addEventListener("click", () => showView("logs"));
 
 $("refresh-sessions").addEventListener("click", async () => {
-  state.sessions = await window.desktop.listSessions();
-  renderSessions();
+  try {
+    state.library = await window.desktop.inspectPoolAll({
+      passcode: $("run-pass").value,
+      proxyUrl: inspectProxyUrl(),
+    });
+    renderLists();
+  } catch (error) {
+    appendLog("log", error.message || String(error));
+  }
 });
 
 $("add-folder").addEventListener("click", async () => {
@@ -771,40 +803,12 @@ $("add-proxy").addEventListener("click", async () => {
   await persistLibrary();
 });
 
-$("scan-admins-btn").addEventListener("click", async () => {
-  const poolId = $("admin-pool-select").value;
-  const entry = (state.library.pool || []).find((item) => item.id === poolId);
-  if (!entry) {
-    $("admin-scan-state").textContent = "Выберите tdata из пула";
-    return;
-  }
-  $("admin-scan-state").textContent = "Сканирование…";
-  $("scan-admins-btn").disabled = true;
-  try {
-    const proxy = state.library.proxies.find((item) => item.id === $("admin-proxy").value);
-    const { library } = await window.desktop.scanAdmins({
-      tdataPath: entry.path,
-      passcode: $("admin-pass").value,
-      proxyUrl: proxy ? proxyUrl(proxy) : "",
-    });
-    state.library = library;
-    renderLists();
-    $("admin-scan-state").textContent = "Готово";
-  } catch (error) {
-    $("admin-scan-state").textContent = error.message || String(error);
-  } finally {
-    $("scan-admins-btn").disabled = false;
-    $("admin-pass").value = "";
-  }
-});
-
 document.body.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
   if (!button) return;
   const action = button.dataset.action;
-  if (action === "delete-session") {
-    state.sessions = await window.desktop.deleteSession(button.dataset.name);
-    renderSessions();
+  if (action === "rescan-pool") {
+    inspectPoolItem(button.dataset.id).catch((error) => appendLog("log", error.message || String(error)));
   }
   if (action === "delete-folder") {
     state.library.folders = state.library.folders.filter((item) => item.id !== button.dataset.id);
@@ -826,6 +830,11 @@ document.body.addEventListener("click", async (event) => {
 $("win-min").addEventListener("click", () => window.desktop.minimize());
 $("win-max").addEventListener("click", () => window.desktop.maximize());
 $("win-close").addEventListener("click", () => window.desktop.close());
+
+window.desktop.onPoolUpdated((library) => {
+  state.library = library;
+  renderLists();
+});
 
 window.desktop.onLog((line) => appendLog("log", line));
 window.desktop.onBotLog((line) => appendLog("bot-log", line));

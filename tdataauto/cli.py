@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from tdataauto.config import Settings, ensure_data_dirs
+from tdataauto.core.account_profile import build_account_profile
 from tdataauto.core.admin_chats import list_admin_chats
 from tdataauto.core.batch import run_batch
 from tdataauto.core.pipeline import run_for_tdata
@@ -63,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--passcode", type=str, default=None)
     scan.add_argument("--json", action="store_true")
     scan.add_argument("-v", "--verbose", action="store_true")
+
+    inspect = sub.add_parser("inspect-account", help="Профиль аккаунта из tdata")
+    inspect.add_argument("--tdata", type=Path, required=True)
+    inspect.add_argument("--passcode", type=str, default=None)
+    inspect.add_argument("--json", action="store_true")
+    inspect.add_argument("-v", "--verbose", action="store_true")
 
     bot = sub.add_parser("bot", help="Запустить Telegram-бота для загрузки tdata")
     bot.add_argument("-v", "--verbose", action="store_true")
@@ -177,19 +184,24 @@ async def _cmd_run_batch(args: argparse.Namespace) -> int:
     return 0 if payload["succeeded"] else 1
 
 
-async def _cmd_scan_admins(args: argparse.Namespace) -> int:
+async def _client_for_tdata(args: argparse.Namespace, session_prefix: str):
     settings = Settings.load()
     _, sessions, _ = ensure_data_dirs(settings.data_dir)
     passcode = args.passcode or os.getenv("TDATA_PASSCODE") or None
     proxy_url = os.getenv("TDATA_PROXY") or None
     tdata_path = find_tdata_root(args.tdata)
-    session_file = sessions / f"scan_{tdata_path.name}.session"
+    session_file = sessions / f"{session_prefix}_{tdata_path.name}.session"
     client = await client_from_tdata(
         tdata_path,
         session_file,
         passcode=passcode,
         proxy_url=proxy_url,
     )
+    return client, tdata_path
+
+
+async def _cmd_scan_admins(args: argparse.Namespace) -> int:
+    client, _tdata_path = await _client_for_tdata(args, "scan")
     try:
         me = await client.get_me()
         chats = await list_admin_chats(client)
@@ -207,6 +219,32 @@ async def _cmd_scan_admins(args: argparse.Namespace) -> int:
             for chat in chats:
                 user = f"@{chat['username']}" if chat.get("username") else str(chat["id"])
                 print(f"{chat['type']}\t{chat['title']}\t{user}\t{chat['rights']}")
+        return 0
+    finally:
+        await client.disconnect()
+
+
+async def _cmd_inspect_account(args: argparse.Namespace) -> int:
+    from datetime import datetime, timezone
+
+    client, _tdata_path = await _client_for_tdata(args, "inspect")
+    try:
+        profile = await build_account_profile(client)
+        payload = {
+            **profile,
+            "scanned_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if args.json:
+            print("TDATA_ACCOUNT_PROFILE " + json.dumps(payload, ensure_ascii=False), flush=True)
+        else:
+            acc = payload["account"]
+            user = f"@{acc['username']}" if acc.get("username") else str(acc["id"])
+            print(
+                f"{acc.get('name') or user}\t{user}\tpremium={acc.get('premium')}\t"
+                f"stars={payload['stars']}\tnft={payload['gifts']['nft']}\t"
+                f"admin_chats={payload['admin_chats']}\tadmin_channels={payload['admin_channels']}\t"
+                f"bots={len(payload['bots'])}"
+            )
         return 0
     finally:
         await client.disconnect()
@@ -230,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_cmd_run_batch(args))
     if args.command == "scan-admins":
         return asyncio.run(_cmd_scan_admins(args))
+    if args.command == "inspect-account":
+        return asyncio.run(_cmd_inspect_account(args))
     if args.command == "bot":
         return asyncio.run(_cmd_bot(args))
     parser.error(f"Неизвестная команда: {args.command}")
