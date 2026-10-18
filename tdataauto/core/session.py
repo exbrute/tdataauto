@@ -65,8 +65,26 @@ async def client_from_tdata(
     proxy = parse_proxy(proxy_url)
     if proxy:
         client.set_proxy(proxy)
-        logger.info("Прокси %s:%s", proxy["addr"], proxy["port"])
-    await client.connect()
+        logger.info("Прокси %s://%s:%s", proxy["proxy_type"], proxy["addr"], proxy["port"])
+    else:
+        logger.warning(
+            "Прокси не задан (TDATA_PROXY). Если Telegram недоступен напрямую, "
+            "укажите SOCKS5 на вкладке «Прокси» и выберите его для пула."
+        )
+    if hasattr(client, "_connection_retries"):
+        client._connection_retries = 2
+    if hasattr(client, "_timeout"):
+        client._timeout = 10
+    try:
+        await client.connect()
+    except (ConnectionError, OSError, TimeoutError) as exc:
+        hint = (
+            "Не удалось подключиться к Telegram через прокси. Проверьте тип (SOCKS5), хост и порт."
+            if proxy
+            else "Не удалось подключиться к Telegram. Скорее всего нужен SOCKS5/HTTP прокси "
+            "(вкладка «Прокси» → выберите в «Прокси для пула» на «Аккаунтах»)."
+        )
+        raise ConnectionError(f"{hint} ({exc})") from exc
     if not await client.is_user_authorized():
         await client.disconnect()
         raise RuntimeError("Сессия из tdata не авторизована в Telegram.")

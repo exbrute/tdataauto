@@ -227,7 +227,11 @@ async def _cmd_scan_admins(args: argparse.Namespace) -> int:
 async def _cmd_inspect_account(args: argparse.Namespace) -> int:
     from datetime import datetime, timezone
 
-    client, _tdata_path = await _client_for_tdata(args, "inspect")
+    try:
+        client, _tdata_path = await _client_for_tdata(args, "inspect")
+    except (ConnectionError, OSError, TimeoutError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 3
     try:
         profile = await build_account_profile(client)
         payload = {

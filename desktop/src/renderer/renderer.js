@@ -299,8 +299,18 @@ function renderAccounts() {
   $("accounts-table").innerHTML = tableHtml(filteredHistory());
 }
 
+function resolveProxyForRun() {
+  const proxies = state.library.proxies || [];
+  const selectedId = $("run-proxy")?.value || state.settings.defaultProxyId || "";
+  let proxy = selectedId ? proxies.find((item) => item.id === selectedId) : null;
+  if (!proxy && proxies.length === 1) {
+    proxy = proxies[0];
+  }
+  return proxy;
+}
+
 function inspectProxyUrl() {
-  const proxy = state.library.proxies.find((item) => item.id === $("run-proxy").value);
+  const proxy = resolveProxyForRun();
   return proxy ? proxyUrl(proxy) : "";
 }
 
@@ -470,7 +480,11 @@ function fillProxySelect() {
       ),
     )
     .join("");
-  if ([...select.options].some((option) => option.value === current)) select.value = current;
+  const preferred =
+    current ||
+    state.settings.defaultProxyId ||
+    (state.library.proxies.length === 1 ? state.library.proxies[0].id : "");
+  if ([...select.options].some((option) => option.value === preferred)) select.value = preferred;
 }
 
 function proxyUrl(proxy) {
@@ -550,6 +564,7 @@ function collectSettings() {
     apiId: $("set-api-id").value.trim(),
     apiHash: $("set-api-hash").value.trim(),
     botToken: $("set-token").value.trim(),
+    defaultProxyId: state.settings.defaultProxyId || $("run-proxy").value || "",
   };
 }
 
@@ -651,6 +666,12 @@ $("channel-link").addEventListener("input", () => {
   paintLink("run-link", "link-preview");
 });
 
+$("run-proxy").addEventListener("change", async () => {
+  const id = $("run-proxy").value;
+  if (!id) return;
+  state.settings = await window.desktop.saveSettings({ ...collectSettings(), defaultProxyId: id });
+});
+
 $("pick-folder").addEventListener("click", async () => addToPool(await window.desktop.pickFolder()));
 $("pick-zip").addEventListener("click", async () => addToPool(await window.desktop.pickZip()));
 
@@ -705,7 +726,7 @@ $("run-btn").addEventListener("click", async () => {
     channelPostUrl: $("run-link").value.trim(),
   });
   try {
-    const proxy = state.library.proxies.find((item) => item.id === $("run-proxy").value);
+    const proxy = resolveProxyForRun();
     $("log").textContent = "";
     const done = await window.desktop.runBatch({
       tdataPaths: poolPaths,
@@ -786,14 +807,19 @@ $("add-proxy").addEventListener("click", async () => {
     $("proxy-list").insertAdjacentHTML("afterbegin", `<p class="muted">Укажите хост и порт.</p>`);
     return;
   }
+  const proxyId = String(Date.now());
   state.library.proxies.unshift({
-    id: String(Date.now()),
+    id: proxyId,
     label: $("proxy-label").value.trim(),
     type: $("proxy-type").value,
     host,
     port,
     username: $("proxy-user").value.trim(),
     password: $("proxy-pass").value,
+  });
+  state.settings = await window.desktop.saveSettings({
+    ...collectSettings(),
+    defaultProxyId: proxyId,
   });
   $("proxy-label").value = "";
   $("proxy-host").value = "";

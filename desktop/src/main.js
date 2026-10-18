@@ -26,6 +26,7 @@ const defaultSettings = {
   apiId: "",
   apiHash: "",
   botToken: "",
+  defaultProxyId: "",
 };
 
 let mainWindow = null;
@@ -315,18 +316,20 @@ function runPythonModule(args, settings, passcode, proxyUrl) {
   const child = spawn(python, args, { env, windowsHide: true });
   runChild = child;
   let stdout = "";
+  let stderr = "";
   child.stdout.on("data", (chunk) => {
     stdout += chunk.toString();
     chunk.toString().split(/\r?\n/).filter(Boolean).forEach(pipelineSendLog);
   });
   child.stderr.on("data", (chunk) => {
+    stderr += chunk.toString();
     chunk.toString().split(/\r?\n/).filter(Boolean).forEach(pipelineSendLog);
   });
   child.on("error", (err) => pipelineSendLog(err.message));
   return new Promise((resolve, reject) => {
     child.on("close", (code) => {
       runChild = null;
-      resolve({ code, stdout });
+      resolve({ code, stdout, stderr });
     });
     child.on("error", (err) => {
       runChild = null;
@@ -386,6 +389,20 @@ async function runBatchJob(payload) {
   return pushHistory(entry);
 }
 
+function scanFailureMessage(stdout, stderr, proxyUrl) {
+  const text = `${stdout}\n${stderr}`;
+  if (/Connection to Telegram failed|TimeoutError|ConnectionError|Не удалось подключиться/i.test(text)) {
+    return proxyUrl
+      ? "Таймаут через прокси. Проверьте SOCKS5/HTTP: хост, порт, логин."
+      : "Нет связи с Telegram. Добавьте прокси на «Прокси» и выберите в «Прокси для пула».";
+  }
+  if (/passcode|Не удалось загрузить tdata/i.test(text)) {
+    return "Не удалось открыть tdata — проверьте passcode.";
+  }
+  const line = stderr.split("\n").map((row) => row.trim()).find(Boolean);
+  return line || "Не удалось получить профиль аккаунта.";
+}
+
 async function inspectPoolEntry(payload) {
   const settings = loadSettings();
   const poolId = String(payload.poolId || "");
@@ -401,16 +418,17 @@ async function inspectPoolEntry(payload) {
   const python = resolvePython();
   const tdataPath = await resolveTdataInput(entry.path, python);
   const args = ["-m", "tdataauto", "inspect-account", "--tdata", tdataPath, "--json", "-v"];
-  const { stdout } = await runPythonModule(
+  const proxyUrl = payload.proxyUrl || "";
+  const { stdout, stderr } = await runPythonModule(
     args,
     settings,
     payload.passcode,
-    payload.proxyUrl,
+    proxyUrl,
   );
   const profile = parseJsonMarker(stdout, "TDATA_ACCOUNT_PROFILE");
   entry.profile = profile || null;
   entry.scanStatus = profile ? "ready" : "error";
-  entry.scanError = profile ? "" : "Не удалось получить профиль (проверьте passcode и прокси)";
+  entry.scanError = profile ? "" : scanFailureMessage(stdout, stderr, proxyUrl);
   entry.scannedAt = profile?.scanned_at || new Date().toISOString();
   writeJson(libraryFile(), library);
   sendPoolUpdated(library);
