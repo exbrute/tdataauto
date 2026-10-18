@@ -30,11 +30,17 @@ async def run_for_tdata(
     keep_stars: int,
     max_paid_reaction_batch: int,
     passcode: str | None = None,
+    proxy_url: str | None = None,
 ) -> RunReport:
     tdata_path = find_tdata_root(tdata_root)
     target = parse_channel_post_url(channel_post_url)
 
-    client = await client_from_tdata(tdata_path, session_file, passcode=passcode)
+    client = await client_from_tdata(
+        tdata_path,
+        session_file,
+        passcode=passcode,
+        proxy_url=proxy_url,
+    )
     try:
         stars_before = await get_stars_balance(client)
         gifts_result = await process_gifts(

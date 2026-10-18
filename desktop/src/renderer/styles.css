@@ -66,7 +66,8 @@ svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width:
 }
 .logo svg { width: 16px; height: 16px; stroke: none; }
 
-.nav { display: flex; flex-direction: column; gap: 4px; margin-top: 18px; }
+.nav { display: flex; flex-direction: column; gap: 4px; margin-top: 18px; min-height: 0; overflow: auto; }
+.sidebar { min-height: 0; }
 .nav-bottom { margin-top: auto; }
 
 .nav-btn {
@@ -87,6 +88,14 @@ svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width:
 .nav-btn svg { color: #9a9aa0; }
 .nav-btn.active { background: #2a2a2a; color: white; }
 .nav-btn.active svg { color: var(--orange); }
+.nav-btn.active::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--orange);
+}
 .nav-btn:hover { background: #232323; }
 
 .workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -388,6 +397,20 @@ td.grow.down { color: var(--red); font-weight: 700; }
 .prose p, .prose li { color: #c8c8cc; line-height: 1.55; }
 .prose { max-width: 760px; }
 .narrow { max-width: 640px; }
+.stack { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #161616;
+}
+.list-row b { display: block; font-size: 13px; }
+.list-row span { color: var(--muted); font-size: 12px; word-break: break-all; }
+.btn.small { height: 32px; padding: 0 10px; font-size: 12px; }
+.btn.danger { background: transparent; border-color: #5a3030; color: #ff8d8d; }
 .form-card.narrow .btn.primary { width: auto; }
 
 @media (max-width: 1180px) {

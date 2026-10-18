@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import urllib.parse
 from pathlib import Path
 
 from opentele.api import API, UseCurrentSession
@@ -24,11 +25,28 @@ def find_tdata_root(base: Path) -> Path:
     raise FileNotFoundError(f"Папка tdata не найдена в {base}")
 
 
+def parse_proxy(proxy_url: str | None) -> dict | None:
+    if not proxy_url:
+        return None
+    parsed = urllib.parse.urlparse(proxy_url.strip())
+    if parsed.scheme not in {"socks5", "socks4", "http"} or not parsed.hostname or not parsed.port:
+        raise RuntimeError("Прокси должен быть вида socks5://host:port или http://user:pass@host:port")
+    return {
+        "proxy_type": parsed.scheme,
+        "addr": parsed.hostname,
+        "port": parsed.port,
+        "username": urllib.parse.unquote(parsed.username) if parsed.username else None,
+        "password": urllib.parse.unquote(parsed.password) if parsed.password else None,
+        "rdns": True,
+    }
+
+
 async def client_from_tdata(
     tdata_path: Path,
     session_file: Path,
     *,
     passcode: str | None = None,
+    proxy_url: str | None = None,
 ) -> TelegramClient:
     tdesk = TDesktop(str(tdata_path), passcode=passcode)
     if not tdesk.isLoaded():
@@ -44,6 +62,10 @@ async def client_from_tdata(
         flag=UseCurrentSession,
         api=api,
     )
+    proxy = parse_proxy(proxy_url)
+    if proxy:
+        client.set_proxy(proxy)
+        logger.info("Прокси %s:%s", proxy["addr"], proxy["port"])
     await client.connect()
     if not await client.is_user_authorized():
         await client.disconnect()

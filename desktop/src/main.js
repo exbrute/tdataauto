@@ -40,6 +40,32 @@ function historyFile() {
   return path.join(app.getPath("userData"), "history.json");
 }
 
+function libraryFile() {
+  return path.join(app.getPath("userData"), "library.json");
+}
+
+function loadLibrary() {
+  const data = readJson(libraryFile(), {});
+  return {
+    folders: Array.isArray(data.folders) ? data.folders : [],
+    proxies: Array.isArray(data.proxies) ? data.proxies : [],
+    admins: Array.isArray(data.admins) ? data.admins : [],
+  };
+}
+
+function listSessionFiles() {
+  const dir = path.join(dataDir(), "sessions");
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith(".session"))
+    .map((name) => {
+      const stat = fs.statSync(path.join(dir, name));
+      return { name, size: stat.size, mtime: stat.mtimeMs };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+}
+
 function readJson(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -70,6 +96,11 @@ function pythonSpawnEnv(settings, passcode) {
   env.PYTHONIOENCODING = "utf-8";
   env.QT_QPA_PLATFORM = "offscreen";
   if (!app.isPackaged) env.PYTHONPATH = projectRoot();
+  const adminIds = loadLibrary()
+    .admins.map((item) => String(item.telegramId || "").trim())
+    .filter((id) => /^\d+$/.test(id));
+  if (adminIds.length) env.ADMIN_IDS = adminIds.join(",");
+  else delete env.ADMIN_IDS;
   return env;
 }
 
@@ -140,11 +171,36 @@ ipcMain.handle("window:close", () => mainWindow && mainWindow.close());
 ipcMain.handle("state:get", () => ({
   settings: loadSettings(),
   history: readJson(historyFile(), []),
+  library: loadLibrary(),
+  sessions: listSessionFiles(),
   python: resolvePython(),
   repoRoot: app.isPackaged ? process.resourcesPath : projectRoot(),
   botRunning: Boolean(botChild && !botChild.killed),
   runBusy: Boolean(runChild && !runChild.killed),
 }));
+
+ipcMain.handle("library:save", (_event, library) => {
+  const next = {
+    folders: Array.isArray(library.folders) ? library.folders : [],
+    proxies: Array.isArray(library.proxies) ? library.proxies : [],
+    admins: Array.isArray(library.admins) ? library.admins : [],
+  };
+  writeJson(libraryFile(), next);
+  return next;
+});
+
+ipcMain.handle("sessions:list", () => listSessionFiles());
+
+ipcMain.handle("sessions:delete", (_event, name) => {
+  const safe = path.basename(String(name || ""));
+  if (!safe.endsWith(".session")) throw new Error("Некорректное имя сессии");
+  const dir = path.join(dataDir(), "sessions");
+  for (const suffix of ["", "-journal"]) {
+    const file = path.join(dir, `${safe}${suffix}`);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+  return listSessionFiles();
+});
 
 ipcMain.handle("settings:save", (_event, settings) => {
   const next = { ...defaultSettings, ...settings };
@@ -228,8 +284,11 @@ ipcMain.handle("pipeline:run", async (_event, payload) => {
   }
 
   const args = ["-m", "tdataauto", "run", "--tdata", tdataPath, "--link", link, "--json", "-v"];
+  const env = pythonSpawnEnv(settings, payload.passcode);
+  if (payload.proxyUrl) env.TDATA_PROXY = String(payload.proxyUrl);
+  else delete env.TDATA_PROXY;
   const child = spawn(python, args, {
-    env: pythonSpawnEnv(settings, payload.passcode),
+    env,
     windowsHide: true,
   });
   runChild = child;

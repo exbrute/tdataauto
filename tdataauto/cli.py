@@ -58,6 +58,7 @@ async def _cmd_run(args: argparse.Namespace) -> int:
 
     session_file = sessions / f"{args.tdata.resolve().name}.session"
     passcode = args.passcode or os.getenv("TDATA_PASSCODE") or None
+    proxy_url = os.getenv("TDATA_PROXY") or None
     report = await run_for_tdata(
         args.tdata,
         session_file,
@@ -67,6 +68,7 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         keep_stars=settings.keep_stars,
         max_paid_reaction_batch=settings.max_paid_reaction_batch,
         passcode=passcode,
+        proxy_url=proxy_url,
     )
     payload = {
         "converted": report.gifts.converted,

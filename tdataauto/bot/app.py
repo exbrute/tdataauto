@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
 import zipfile
 from pathlib import Path
 
-from aiogram import Bot, Dispatcher, F
+from aiogram import BaseMiddleware, Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
@@ -17,6 +18,22 @@ from tdataauto.core.pipeline import run_for_tdata
 from tdataauto.bot.states import UploadFlow
 
 logger = logging.getLogger(__name__)
+
+
+def _admin_ids() -> set[int]:
+    raw = os.getenv("ADMIN_IDS", "")
+    return {int(part) for part in raw.split(",") if part.strip().isdigit()}
+
+
+class AdminGate(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        allowed = _admin_ids()
+        user = getattr(event, "from_user", None)
+        if allowed and user and user.id not in allowed:
+            if hasattr(event, "answer"):
+                await event.answer("Нет доступа.")
+            return None
+        return await handler(event, data)
 
 
 def _extract_archive(archive_path: Path, dest: Path) -> Path:
@@ -39,6 +56,7 @@ async def run_bot(*, verbose: bool = False) -> None:
     incoming, sessions, tmp = ensure_data_dirs(settings.data_dir)
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
+    dp.message.middleware(AdminGate())
 
     @dp.message(CommandStart())
     async def start(message: Message, state: FSMContext) -> None:

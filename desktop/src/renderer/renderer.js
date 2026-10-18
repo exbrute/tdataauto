@@ -1,13 +1,30 @@
 const state = {
-  view: "dashboard",
+  view: "accounts",
   settings: {},
   history: [],
+  library: { folders: [], proxies: [], admins: [] },
+  sessions: [],
   tdataPath: "",
   running: false,
   botRunning: false,
   query: "",
   pythonOk: null,
 };
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
+
+function matchesQuery(text) {
+  const query = state.query.trim().toLowerCase();
+  return !query || String(text).toLowerCase().includes(query);
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -207,7 +224,7 @@ function growthCell(item, index, list) {
 function tableHtml(items, limit) {
   const rows = (limit ? items.slice(0, limit) : items);
   if (!rows.length) {
-    return `<table><tr><td>Запусков пока нет. Откройте «Запуск» и выберите tdata.</td></tr></table>`;
+    return `<table><tr><td>Аккаунтов пока нет. Выберите tdata на вкладке «Аккаунты».</td></tr></table>`;
   }
   const body = rows
     .map((item, index) => {
@@ -248,6 +265,83 @@ function renderAccounts() {
   $("accounts-table").innerHTML = tableHtml(filteredHistory());
 }
 
+function renderSessions() {
+  const items = state.sessions.filter((item) => matchesQuery(item.name));
+  $("session-list").innerHTML = items.length
+    ? items
+        .map(
+          (item) => `<div class="list-row"><div><b>${escapeHtml(item.name)}</b><span>${Math.max(1, Math.ceil(item.size / 1024))} КБ · ${new Date(item.mtime).toLocaleString("ru-RU")}</span></div><button class="btn small danger" type="button" data-action="delete-session" data-name="${escapeHtml(item.name)}">Удалить</button></div>`,
+        )
+        .join("")
+    : `<p class="muted">Сессий пока нет. Они появляются после обработки tdata.</p>`;
+}
+
+function renderFolders() {
+  const items = state.library.folders.filter((item) => matchesQuery(item.path));
+  $("folder-list").innerHTML = items.length
+    ? items
+        .map(
+          (item) => `<div class="list-row"><div><b>${escapeHtml(item.path.split(/[\\/]/).pop() || item.path)}</b><span>${escapeHtml(item.path)}</span></div><div class="row"><button class="btn small" type="button" data-action="use-folder" data-path="${escapeHtml(item.path)}">Открыть</button><button class="btn small danger" type="button" data-action="delete-folder" data-id="${escapeHtml(item.id)}">Удалить</button></div></div>`,
+        )
+        .join("")
+    : `<p class="muted">Папок нет. Добавьте каталог с tdata.</p>`;
+}
+
+function renderProxies() {
+  const items = state.library.proxies.filter((item) => matchesQuery(`${item.label} ${item.host} ${item.type}`));
+  $("proxy-list").innerHTML = items.length
+    ? items
+        .map(
+          (item) => `<div class="list-row"><div><b>${escapeHtml(item.label || item.host)}</b><span>${escapeHtml(item.type)} · ${escapeHtml(item.host)}:${escapeHtml(item.port)}</span></div><button class="btn small danger" type="button" data-action="delete-proxy" data-id="${escapeHtml(item.id)}">Удалить</button></div>`,
+        )
+        .join("")
+    : `<p class="muted">Прокси нет. Можно работать напрямую.</p>`;
+}
+
+function renderAdmins() {
+  const items = state.library.admins.filter((item) => matchesQuery(`${item.name} ${item.telegramId}`));
+  $("admin-list").innerHTML = items.length
+    ? items
+        .map(
+          (item) => `<div class="list-row"><div><b>${escapeHtml(item.name || "Админ")}</b><span>id ${escapeHtml(item.telegramId)}</span></div><button class="btn small danger" type="button" data-action="delete-admin" data-id="${escapeHtml(item.id)}">Удалить</button></div>`,
+        )
+        .join("")
+    : `<p class="muted">Список пуст — бот доступен всем, кто знает его.</p>`;
+}
+
+function renderLists() {
+  renderSessions();
+  renderFolders();
+  renderProxies();
+  renderAdmins();
+}
+
+function fillProxySelect() {
+  const select = $("run-proxy");
+  const current = select.value;
+  select.innerHTML = [`<option value="">Без прокси</option>`]
+    .concat(
+      state.library.proxies.map(
+        (item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || `${item.host}:${item.port}`)}</option>`,
+      ),
+    )
+    .join("");
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function proxyUrl(proxy) {
+  const auth = proxy.username
+    ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password || "")}@`
+    : "";
+  return `${proxy.type}://${auth}${proxy.host}:${proxy.port}`;
+}
+
+async function persistLibrary() {
+  state.library = await window.desktop.saveLibrary(state.library);
+  fillProxySelect();
+  renderLists();
+}
+
 function renderAll() {
   renderMetrics("metrics");
   renderMetrics("gift-metrics");
@@ -255,6 +349,7 @@ function renderAll() {
   renderChart("chart", false);
   renderChart("chart-full", true);
   renderAccounts();
+  renderLists();
   $("dash-table").innerHTML = tableHtml(filteredHistory(), 4);
   $("history-table").innerHTML = tableHtml(filteredHistory());
   const failed = state.history.some((item) => !item.ok);
@@ -337,8 +432,11 @@ async function boot() {
   const snapshot = await window.desktop.getState();
   state.settings = snapshot.settings;
   state.history = snapshot.history || [];
+  state.library = snapshot.library || state.library;
+  state.sessions = snapshot.sessions || [];
   state.botRunning = snapshot.botRunning;
   fillForms();
+  fillProxySelect();
   renderAll();
   const initialView = new URLSearchParams(window.location.search).get("view");
   if (initialView) showView(initialView);
@@ -426,13 +524,16 @@ $("run-btn").addEventListener("click", async () => {
     channelPostUrl: $("run-link").value.trim(),
   });
   try {
+    const proxy = state.library.proxies.find((item) => item.id === $("run-proxy").value);
     const done = await window.desktop.run({
       tdataPath: state.tdataPath,
       link: $("run-link").value.trim(),
       passcode: $("run-pass").value,
+      proxyUrl: proxy ? proxyUrl(proxy) : "",
       settings: state.settings,
     });
     state.history = done.history;
+    state.sessions = await window.desktop.listSessions();
     renderAll();
     $("run-state").textContent = done.entry.ok ? "Готово" : "Ошибка";
   } catch (error) {
@@ -467,7 +568,85 @@ $("clear-history").addEventListener("click", async () => {
   renderAll();
 });
 
-$("bell").addEventListener("click", () => showView("analysis"));
+$("bell").addEventListener("click", () => showView("logs"));
+
+$("refresh-sessions").addEventListener("click", async () => {
+  state.sessions = await window.desktop.listSessions();
+  renderSessions();
+});
+
+$("add-folder").addEventListener("click", async () => {
+  const folder = await window.desktop.pickFolder();
+  if (!folder) return;
+  state.library.folders.unshift({ id: String(Date.now()), path: folder, addedAt: new Date().toISOString() });
+  await persistLibrary();
+});
+
+$("add-proxy").addEventListener("click", async () => {
+  const host = $("proxy-host").value.trim();
+  const port = Number($("proxy-port").value);
+  if (!host || !port) {
+    $("proxy-list").insertAdjacentHTML("afterbegin", `<p class="muted">Укажите хост и порт.</p>`);
+    return;
+  }
+  state.library.proxies.unshift({
+    id: String(Date.now()),
+    label: $("proxy-label").value.trim(),
+    type: $("proxy-type").value,
+    host,
+    port,
+    username: $("proxy-user").value.trim(),
+    password: $("proxy-pass").value,
+  });
+  $("proxy-label").value = "";
+  $("proxy-host").value = "";
+  $("proxy-port").value = "";
+  $("proxy-user").value = "";
+  $("proxy-pass").value = "";
+  await persistLibrary();
+});
+
+$("add-admin").addEventListener("click", async () => {
+  const telegramId = $("admin-id").value.trim();
+  if (!/^\d+$/.test(telegramId)) {
+    $("admin-list").insertAdjacentHTML("afterbegin", `<p class="muted">Нужен числовой Telegram id.</p>`);
+    return;
+  }
+  state.library.admins.unshift({
+    id: String(Date.now()),
+    name: $("admin-name").value.trim(),
+    telegramId,
+  });
+  $("admin-name").value = "";
+  $("admin-id").value = "";
+  await persistLibrary();
+});
+
+document.body.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  if (action === "delete-session") {
+    state.sessions = await window.desktop.deleteSession(button.dataset.name);
+    renderSessions();
+  }
+  if (action === "delete-folder") {
+    state.library.folders = state.library.folders.filter((item) => item.id !== button.dataset.id);
+    await persistLibrary();
+  }
+  if (action === "use-folder") {
+    setPath(button.dataset.path);
+    showView("accounts");
+  }
+  if (action === "delete-proxy") {
+    state.library.proxies = state.library.proxies.filter((item) => item.id !== button.dataset.id);
+    await persistLibrary();
+  }
+  if (action === "delete-admin") {
+    state.library.admins = state.library.admins.filter((item) => item.id !== button.dataset.id);
+    await persistLibrary();
+  }
+});
 $("win-min").addEventListener("click", () => window.desktop.minimize());
 $("win-max").addEventListener("click", () => window.desktop.maximize());
 $("win-close").addEventListener("click", () => window.desktop.close());

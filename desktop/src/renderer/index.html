@@ -21,29 +21,37 @@
         </div>
 
         <nav class="nav" id="nav">
-          <button class="nav-btn active" data-view="dashboard" type="button">
-            <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"/></svg>
-            Обзор
-          </button>
-          <button class="nav-btn" data-view="run" type="button">
-            <svg viewBox="0 0 24 24"><path d="M8 6.5v11l10-5.5-10-5.5Z"/></svg>
-            Запуск
-          </button>
-          <button class="nav-btn" data-view="gifts" type="button">
-            <svg viewBox="0 0 24 24"><path d="M4 11h16v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8Zm0-3h16v3H4V8Zm6 0V5.5A2.5 2.5 0 0 0 7.5 3 2.5 2.5 0 0 0 10 6.5V8Zm4 0V6.5A2.5 2.5 0 0 1 16.5 3 2.5 2.5 0 0 1 14 6.5V8Z"/></svg>
-            Подарки
-          </button>
-          <button class="nav-btn" data-view="accounts" type="button">
-            <svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm6 1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM4 19c.4-2.6 2.5-4 5-4s4.6 1.4 5 4M14 15.2c1.6-.3 3.2.3 4.2 1.8.6.9.9 1.8.9 2"/></svg>
+          <button class="nav-btn active" data-view="accounts" type="button">
+            <svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm6 1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM4 19c.4-2.6 2.5-4 5-4s4.6 1.4 5 4"/></svg>
             Аккаунты
           </button>
-          <button class="nav-btn" data-view="analysis" type="button">
-            <svg viewBox="0 0 24 24"><path d="M5 19V10M12 19V5M19 19v-7"/></svg>
-            Анализ
+          <button class="nav-btn" data-view="sessions" type="button">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            Сессии
           </button>
-          <button class="nav-btn" data-view="channel" type="button">
-            <svg viewBox="0 0 24 24"><path d="m4 10 16-6-4 16-4.2-5.2L4 10Zm7.2 4.2 6.3-6.7"/></svg>
-            Канал
+          <button class="nav-btn" data-view="folders" type="button">
+            <svg viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10Z"/></svg>
+            Папки
+          </button>
+          <button class="nav-btn" data-view="proxies" type="button">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.2 2.4 3.3 5.1 3.3 8S14.2 17.6 12 20c-2.2-2.4-3.3-5.1-3.3-8S9.8 6.4 12 4Z"/></svg>
+            Прокси
+          </button>
+          <button class="nav-btn" data-view="dashboard" type="button">
+            <svg viewBox="0 0 24 24"><path d="M5 19V10M12 19V5M19 19v-7"/></svg>
+            Статистика
+          </button>
+          <button class="nav-btn" data-view="logs" type="button">
+            <svg viewBox="0 0 24 24"><path d="M8 7h11M8 12h11M8 17h11"/><path d="M4 7h.01M4 12h.01M4 17h.01"/></svg>
+            Логи
+          </button>
+          <button class="nav-btn" data-view="admins" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.2 2.8 7.4 7 9 4.2-1.6 7-4.8 7-9V6l-7-3Z"/><path d="M9 12.2 11 14l4-4"/></svg>
+            Админки
+          </button>
+          <button class="nav-btn" data-view="extra" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/></svg>
+            Дополнительно
           </button>
         </nav>
 
@@ -51,10 +59,6 @@
           <button class="nav-btn" data-view="settings" type="button">
             <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="M19.4 13.5a7.7 7.7 0 0 0 .1-1.5 7.7 7.7 0 0 0-.1-1.5l2-1.5-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.6a7.6 7.6 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.5a7.7 7.7 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.6a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5Z"/></svg>
             Настройки
-          </button>
-          <button class="nav-btn" data-view="help" type="button">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.2 2.4c-.7.3-1.2.9-1.2 1.6V14"/><path d="M12 17h.01"/></svg>
-            Помощь
           </button>
         </div>
       </aside>
@@ -80,7 +84,7 @@
           </div>
         </header>
 
-        <section class="view" id="view-dashboard">
+        <section class="view" id="view-dashboard" hidden>
           <div class="metrics" id="metrics"></div>
           <div class="mid">
             <article class="card">
@@ -112,14 +116,14 @@
             <article class="card">
               <div class="card-head">
                 <h2>Последние запуски</h2>
-                <button class="link" type="button" data-jump="analysis">Все</button>
+                <button class="link" type="button" data-jump="logs">Все</button>
               </div>
               <div class="table-wrap" id="dash-table"></div>
             </article>
           </div>
         </section>
 
-        <section class="view" id="view-run" hidden>
+        <section class="view" id="view-accounts">
           <div class="split">
             <article class="card drop-card" id="drop">
               <div class="drop-mark">ZIP</div>
@@ -152,6 +156,9 @@
                   <input id="run-keep" type="number" min="0" step="1" />
                 </label>
               </div>
+              <label class="field">Прокси для этого аккаунта
+                <select id="run-proxy"><option value="">Без прокси</option></select>
+              </label>
               <label class="field">Локальный пароль tdata
                 <input id="run-pass" type="password" placeholder="Если в Telegram Desktop задан passcode" />
               </label>
@@ -160,37 +167,81 @@
           </div>
           <article class="card log-card">
             <div class="card-head">
-              <h2>Журнал</h2>
+              <h2>Журнал текущего запуска</h2>
               <span class="muted" id="run-state">Ожидание</span>
             </div>
             <pre id="log"></pre>
           </article>
-        </section>
-
-        <section class="view" id="view-gifts" hidden>
-          <div class="metrics" id="gift-metrics"></div>
-          <article class="card prose">
-            <h2>Как продаются подарки</h2>
-            <p>Обычный подарок конвертируется в Stars сразу. Коллекционный NFT выставляется на маркетплейс Telegram — звёзды приходят, когда его покупают.</p>
-            <ul>
-              <li><b>both</b> — конвертация и витрина</li>
-              <li><b>convert</b> — только мгновенные звёзды</li>
-              <li><b>resell</b> — только цена NFT. 0 значит минимальную доступную цену</li>
-            </ul>
-          </article>
-        </section>
-
-        <section class="view" id="view-accounts" hidden>
           <article class="card">
-            <div class="card-head"><h2>Обработанные tdata</h2></div>
+            <div class="card-head"><h2>Обработанные аккаунты</h2></div>
             <div class="table-wrap" id="accounts-table"></div>
           </article>
         </section>
 
-        <section class="view" id="view-analysis" hidden>
+        <section class="view" id="view-sessions" hidden>
           <article class="card">
             <div class="card-head">
-              <h2>История</h2>
+              <h2>Сессии Telethon</h2>
+              <button class="link" type="button" id="refresh-sessions">Обновить</button>
+            </div>
+            <p class="muted">Файлы появляются после обработки tdata. Удаление стирает только локальную сессию на этом компьютере.</p>
+            <div class="stack" id="session-list"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-folders" hidden>
+          <article class="card">
+            <div class="card-head">
+              <h2>Папки tdata</h2>
+              <button class="btn" type="button" id="add-folder">Добавить папку</button>
+            </div>
+            <div class="stack" id="folder-list"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-proxies" hidden>
+          <div class="split">
+            <article class="card form-card">
+              <h2>Новый прокси</h2>
+              <label class="field">Название
+                <input id="proxy-label" placeholder="Домашний SOCKS" />
+              </label>
+              <div class="cols">
+                <label class="field">Тип
+                  <select id="proxy-type">
+                    <option value="socks5">SOCKS5</option>
+                    <option value="socks4">SOCKS4</option>
+                    <option value="http">HTTP</option>
+                  </select>
+                </label>
+                <label class="field">Порт
+                  <input id="proxy-port" type="number" min="1" max="65535" placeholder="1080" />
+                </label>
+              </div>
+              <label class="field">Хост
+                <input id="proxy-host" placeholder="127.0.0.1" />
+              </label>
+              <div class="cols">
+                <label class="field">Логин
+                  <input id="proxy-user" />
+                </label>
+                <label class="field">Пароль
+                  <input id="proxy-pass" type="password" />
+                </label>
+              </div>
+              <button class="btn primary" type="button" id="add-proxy">Сохранить прокси</button>
+            </article>
+            <article class="card">
+              <div class="card-head"><h2>Список</h2></div>
+              <div class="stack" id="proxy-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-logs" hidden>
+          <article class="card">
+            <div class="card-head">
+              <h2>Логи запусков</h2>
               <button class="link" type="button" id="clear-history">Очистить</button>
             </div>
             <div class="chart tall" id="chart-full"></div>
@@ -198,15 +249,44 @@
           </article>
         </section>
 
-        <section class="view" id="view-channel" hidden>
+        <section class="view" id="view-admins" hidden>
+          <div class="split">
+            <article class="card form-card">
+              <h2>Админ бота</h2>
+              <p class="muted">Если список пуст, бот отвечает всем. Если в нём есть id, писать боту могут только эти пользователи. После изменения перезапустите бота в настройках.</p>
+              <label class="field">Имя
+                <input id="admin-name" placeholder="Имя" />
+              </label>
+              <label class="field">Telegram user id
+                <input id="admin-id" inputmode="numeric" placeholder="7602550695" />
+              </label>
+              <button class="btn primary" type="button" id="add-admin">Добавить</button>
+            </article>
+            <article class="card">
+              <div class="card-head"><h2>Кто имеет доступ</h2></div>
+              <div class="stack" id="admin-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-extra" hidden>
+          <div class="metrics" id="gift-metrics"></div>
           <article class="card form-card narrow">
-            <h2>Пост, куда уходят звёзды</h2>
-            <p class="muted">На канале должны быть включены платные реакции. Аккаунт из tdata отправит Stars реакцией на этот пост.</p>
+            <h2>Пост и режим продажи</h2>
+            <p class="muted">На канале должны быть включены платные реакции. Обычные подарки конвертируются в Stars сразу, NFT выставляются на витрину.</p>
             <label class="field">Ссылка
               <input id="channel-link" type="url" placeholder="https://t.me/channel/32" />
             </label>
             <div class="link-preview" id="channel-preview"></div>
             <button class="btn primary" type="button" id="save-channel">Сохранить пост</button>
+          </article>
+          <article class="card prose">
+            <h2>Как пользоваться</h2>
+            <ol>
+              <li>Закройте Telegram Desktop и укажите папку <b>tdata</b> в «Аккаунтах» или сохраните её в «Папках».</li>
+              <li>При необходимости добавьте SOCKS/HTTP в «Прокси».</li>
+              <li>Запустите обработку. Сессия появится в «Сессиях», результат — в «Логах» и «Статистике».</li>
+            </ol>
           </article>
         </section>
 
@@ -240,18 +320,6 @@
           </div>
         </section>
 
-        <section class="view" id="view-help" hidden>
-          <article class="card prose">
-            <h2>Как пользоваться</h2>
-            <ol>
-              <li>Закройте Telegram Desktop и заархивируйте папку <b>tdata</b> целиком.</li>
-              <li>На вкладке «Канал» вставьте ссылку на пост, например <b>https://t.me/name/32</b>.</li>
-              <li>На вкладке «Запуск» выберите ZIP или папку и нажмите кнопку продажи.</li>
-              <li>Звёзды уйдут платной реакцией. NFT появятся на витрине и оплатятся позже.</li>
-            </ol>
-            <p>Локальный пароль tdata вводится только на время запуска и не сохраняется. Токен бота остаётся в локальном файле настроек приложения.</p>
-          </article>
-        </section>
       </div>
     </div>
     <script src="renderer.js"></script>

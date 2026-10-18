@@ -33,7 +33,8 @@ python3 -m pip download \
   "python-dotenv>=1.0" \
   "pyqt5" \
   "tgcrypto>=1.2.5" \
-  "rsa"
+  "rsa" \
+  "python-socks"
 
 python3 -m pip download \
   --dest "$WHEEL_DIR" \
