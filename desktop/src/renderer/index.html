@@ -127,13 +127,17 @@
           <div class="split">
             <article class="card drop-card" id="drop">
               <div class="drop-mark">ZIP</div>
-              <h2>Папка tdata</h2>
-              <p>Перетащите ZIP или папку Telegram Desktop, либо выберите файл. Внутри должны быть <b>key_datas</b> и hex-каталоги.</p>
-              <div class="path" id="tdata-path">Файл ещё не выбран</div>
+              <h2>Пул tdata</h2>
+              <p>Добавляйте несколько ZIP или папок — они обрабатываются одним запуском. Внутри должны быть <b>key_datas</b> и hex-каталоги.</p>
               <div class="row">
-                <button class="btn" type="button" id="pick-folder">Папка</button>
-                <button class="btn ghost" type="button" id="pick-zip">ZIP-архив</button>
+                <button class="btn" type="button" id="pick-folder">Добавить папку</button>
+                <button class="btn ghost" type="button" id="pick-zip">Добавить ZIP</button>
               </div>
+              <div class="card-head" style="margin-top:1rem">
+                <h2>В пуле</h2>
+                <span class="muted" id="pool-count">0 аккаунтов</span>
+              </div>
+              <div class="stack" id="pool-list"></div>
             </article>
             <article class="card form-card">
               <h2>Параметры продажи</h2>
@@ -162,7 +166,7 @@
               <label class="field">Локальный пароль tdata
                 <input id="run-pass" type="password" placeholder="Если в Telegram Desktop задан passcode" />
               </label>
-              <button class="btn primary" type="button" id="run-btn">Продать подарки и отправить звёзды</button>
+              <button class="btn primary" type="button" id="run-btn">Запустить пул</button>
             </article>
           </div>
           <article class="card log-card">
@@ -239,32 +243,39 @@
         </section>
 
         <section class="view" id="view-logs" hidden>
-          <article class="card">
+          <article class="card log-card">
             <div class="card-head">
               <h2>Логи запусков</h2>
               <button class="link" type="button" id="clear-history">Очистить</button>
             </div>
-            <div class="chart tall" id="chart-full"></div>
-            <div class="table-wrap" id="history-table"></div>
+            <p class="muted">Сводка по всем запускам: загруженные аккаунты, списанные звёзды, NFT на витрине и конвертированные подарки.</p>
+            <pre id="logs-console"></pre>
           </article>
         </section>
 
         <section class="view" id="view-admins" hidden>
           <div class="split">
             <article class="card form-card">
-              <h2>Админ бота</h2>
-              <p class="muted">Если список пуст, бот отвечает всем. Если в нём есть id, писать боту могут только эти пользователи. После изменения перезапустите бота в настройках.</p>
-              <label class="field">Имя
-                <input id="admin-name" placeholder="Имя" />
+              <h2>Скан админ-чатов</h2>
+              <p class="muted">Показывает каналы и чаты, где сессия из tdata состоит и имеет права администратора (или создатель).</p>
+              <label class="field">tdata из пула
+                <select id="admin-pool-select"><option value="">— выберите —</option></select>
               </label>
-              <label class="field">Telegram user id
-                <input id="admin-id" inputmode="numeric" placeholder="7602550695" />
+              <label class="field">Локальный пароль tdata
+                <input id="admin-pass" type="password" placeholder="Если задан passcode в Telegram Desktop" />
               </label>
-              <button class="btn primary" type="button" id="add-admin">Добавить</button>
+              <label class="field">Прокси
+                <select id="admin-proxy"><option value="">Без прокси</option></select>
+              </label>
+              <button class="btn primary" type="button" id="scan-admins-btn">Сканировать</button>
+              <p class="muted" id="admin-scan-state">Ожидание</p>
             </article>
             <article class="card">
-              <div class="card-head"><h2>Кто имеет доступ</h2></div>
-              <div class="stack" id="admin-list"></div>
+              <div class="card-head">
+                <h2>Чаты с админ-правами</h2>
+                <span class="muted" id="admin-account-label"></span>
+              </div>
+              <div class="table-wrap" id="admin-chats-table"></div>
             </article>
           </div>
         </section>
@@ -279,14 +290,6 @@
             </label>
             <div class="link-preview" id="channel-preview"></div>
             <button class="btn primary" type="button" id="save-channel">Сохранить пост</button>
-          </article>
-          <article class="card prose">
-            <h2>Как пользоваться</h2>
-            <ol>
-              <li>Закройте Telegram Desktop и укажите папку <b>tdata</b> в «Аккаунтах» или сохраните её в «Папках».</li>
-              <li>При необходимости добавьте SOCKS/HTTP в «Прокси».</li>
-              <li>Запустите обработку. Сессия появится в «Сессиях», результат — в «Логах» и «Статистике».</li>
-            </ol>
           </article>
         </section>
 

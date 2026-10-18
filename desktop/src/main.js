@@ -47,9 +47,10 @@ function libraryFile() {
 function loadLibrary() {
   const data = readJson(libraryFile(), {});
   return {
+    pool: Array.isArray(data.pool) ? data.pool : [],
     folders: Array.isArray(data.folders) ? data.folders : [],
     proxies: Array.isArray(data.proxies) ? data.proxies : [],
-    admins: Array.isArray(data.admins) ? data.admins : [],
+    adminScans: Array.isArray(data.adminScans) ? data.adminScans : [],
   };
 }
 
@@ -96,11 +97,6 @@ function pythonSpawnEnv(settings, passcode) {
   env.PYTHONIOENCODING = "utf-8";
   env.QT_QPA_PLATFORM = "offscreen";
   if (!app.isPackaged) env.PYTHONPATH = projectRoot();
-  const adminIds = loadLibrary()
-    .admins.map((item) => String(item.telegramId || "").trim())
-    .filter((id) => /^\d+$/.test(id));
-  if (adminIds.length) env.ADMIN_IDS = adminIds.join(",");
-  else delete env.ADMIN_IDS;
   return env;
 }
 
@@ -181,9 +177,10 @@ ipcMain.handle("state:get", () => ({
 
 ipcMain.handle("library:save", (_event, library) => {
   const next = {
+    pool: Array.isArray(library.pool) ? library.pool : [],
     folders: Array.isArray(library.folders) ? library.folders : [],
     proxies: Array.isArray(library.proxies) ? library.proxies : [],
-    admins: Array.isArray(library.admins) ? library.admins : [],
+    adminScans: Array.isArray(library.adminScans) ? library.adminScans : [],
   };
   writeJson(libraryFile(), next);
   return next;
@@ -269,83 +266,143 @@ function extractZip(python, zipPath) {
   });
 }
 
-ipcMain.handle("pipeline:run", async (_event, payload) => {
-  if (runChild) throw new Error("Обработка уже выполняется");
-  const settings = { ...loadSettings(), ...(payload.settings || {}) };
-  const link = String(payload.link || settings.channelPostUrl || "").trim();
-  if (!link) throw new Error("Укажите ссылку на пост канала");
-  let tdataPath = String(payload.tdataPath || "").trim();
-  if (!tdataPath) throw new Error("Выберите папку tdata или ZIP");
+async function resolveTdataInput(rawPath, python) {
+  let tdataPath = String(rawPath || "").trim();
+  if (!tdataPath) throw new Error("Путь к tdata не указан");
   if (!fs.existsSync(tdataPath)) throw new Error("Путь к tdata не найден");
-
-  const python = resolvePython();
   if (tdataPath.toLowerCase().endsWith(".zip")) {
     tdataPath = await extractZip(python, tdataPath);
   }
+  return tdataPath;
+}
 
-  const args = ["-m", "tdataauto", "run", "--tdata", tdataPath, "--link", link, "--json", "-v"];
-  const env = pythonSpawnEnv(settings, payload.passcode);
-  if (payload.proxyUrl) env.TDATA_PROXY = String(payload.proxyUrl);
+function pipelineSendLog(line) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pipeline:log", line);
+  }
+}
+
+function parseJsonMarker(stdout, prefix) {
+  const marker = stdout
+    .split("\n")
+    .reverse()
+    .find((line) => line.startsWith(`${prefix} `));
+  if (!marker) return null;
+  try {
+    return JSON.parse(marker.slice(prefix.length + 1));
+  } catch {
+    return null;
+  }
+}
+
+function runPythonModule(args, settings, passcode, proxyUrl) {
+  if (runChild) throw new Error("Обработка уже выполняется");
+  const python = resolvePython();
+  const env = pythonSpawnEnv(settings, passcode);
+  if (proxyUrl) env.TDATA_PROXY = String(proxyUrl);
   else delete env.TDATA_PROXY;
-  const child = spawn(python, args, {
-    env,
-    windowsHide: true,
-  });
+  const child = spawn(python, args, { env, windowsHide: true });
   runChild = child;
-
   let stdout = "";
-  const sendLog = (line) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("pipeline:log", line);
-    }
-  };
-
   child.stdout.on("data", (chunk) => {
     stdout += chunk.toString();
-    chunk.toString().split(/\r?\n/).filter(Boolean).forEach(sendLog);
+    chunk.toString().split(/\r?\n/).filter(Boolean).forEach(pipelineSendLog);
   });
   child.stderr.on("data", (chunk) => {
-    chunk.toString().split(/\r?\n/).filter(Boolean).forEach(sendLog);
+    chunk.toString().split(/\r?\n/).filter(Boolean).forEach(pipelineSendLog);
   });
-  child.on("error", (err) => sendLog(err.message));
-
-  return new Promise((resolve) => {
+  child.on("error", (err) => pipelineSendLog(err.message));
+  return new Promise((resolve, reject) => {
     child.on("close", (code) => {
       runChild = null;
-      const marker = stdout
-        .split("\n")
-        .reverse()
-        .find((line) => line.startsWith("TDATA_RESULT "));
-      let result = null;
-      if (marker) {
-        try {
-          result = JSON.parse(marker.slice("TDATA_RESULT ".length));
-        } catch {
-          result = null;
-        }
-      }
-      const entry = {
-        id: Date.now(),
-        at: new Date().toISOString(),
-        name: path.basename(payload.tdataPath),
-        tdataPath: payload.tdataPath,
-        link,
-        ok: code === 0 && Boolean(result),
-        code,
-        result,
-        error: code === 0 ? "" : "Обработка завершилась с ошибкой. Смотрите журнал.",
-      };
-      const history = readJson(historyFile(), []);
-      history.unshift(entry);
-      const trimmed = history.slice(0, 200);
-      writeJson(historyFile(), trimmed);
-      const done = { entry, history: trimmed };
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("pipeline:done", done);
-      }
-      resolve(done);
+      resolve({ code, stdout });
+    });
+    child.on("error", (err) => {
+      runChild = null;
+      reject(err);
     });
   });
+}
+
+function pushHistory(entry) {
+  const history = readJson(historyFile(), []);
+  history.unshift(entry);
+  const trimmed = history.slice(0, 200);
+  writeJson(historyFile(), trimmed);
+  const done = { entry, history: trimmed };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pipeline:done", done);
+  }
+  return done;
+}
+
+ipcMain.handle("pipeline:run-batch", async (_event, payload) => {
+  const settings = { ...loadSettings(), ...(payload.settings || {}) };
+  const link = String(payload.link || settings.channelPostUrl || "").trim();
+  if (!link) throw new Error("Укажите ссылку на пост канала");
+  const rawPaths = Array.isArray(payload.tdataPaths) ? payload.tdataPaths : [];
+  if (!rawPaths.length) throw new Error("Пул пуст — добавьте tdata на вкладке «Аккаунты»");
+
+  const python = resolvePython();
+  const resolved = [];
+  for (const raw of rawPaths) {
+    resolved.push(await resolveTdataInput(raw, python));
+  }
+
+  const args = ["-m", "tdataauto", "run-batch", "--link", link, "--json", "-v"];
+  for (const item of resolved) args.push("--tdata", item);
+
+  const { code, stdout } = await runPythonModule(
+    args,
+    settings,
+    payload.passcode,
+    payload.proxyUrl,
+  );
+  const result = parseJsonMarker(stdout, "TDATA_BATCH_RESULT");
+  const entry = {
+    id: Date.now(),
+    at: new Date().toISOString(),
+    name: `Пул (${rawPaths.length})`,
+    batch: true,
+    poolSize: rawPaths.length,
+    tdataPaths: rawPaths,
+    link,
+    ok: Boolean(result) && (result.succeeded > 0 || code === 0),
+    code,
+    result,
+    error: result ? "" : "Пакетная обработка завершилась с ошибкой. Смотрите журнал.",
+  };
+  return pushHistory(entry);
+});
+
+ipcMain.handle("admins:scan", async (_event, payload) => {
+  const settings = loadSettings();
+  const rawPath = String(payload.tdataPath || "").trim();
+  if (!rawPath) throw new Error("Выберите tdata из пула");
+
+  const python = resolvePython();
+  const tdataPath = await resolveTdataInput(rawPath, python);
+  const args = ["-m", "tdataauto", "scan-admins", "--tdata", tdataPath, "--json", "-v"];
+  const { code, stdout } = await runPythonModule(
+    args,
+    settings,
+    payload.passcode,
+    payload.proxyUrl,
+  );
+  const result = parseJsonMarker(stdout, "TDATA_ADMIN_CHATS");
+  const scan = {
+    id: String(Date.now()),
+    at: new Date().toISOString(),
+    tdataPath: rawPath,
+    account: result?.account || null,
+    chats: result?.chats || [],
+    ok: code === 0 && Boolean(result),
+  };
+  const library = loadLibrary();
+  library.adminScans.unshift(scan);
+  library.adminScans = library.adminScans.slice(0, 50);
+  writeJson(libraryFile(), library);
+  return { scan, library };
 });
 
 ipcMain.handle("bot:start", () => {
