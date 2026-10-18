@@ -79,7 +79,7 @@ npm install
 npm run dist:win
 ```
 
-На выходе `desktop/dist/StarFlow-0.1.0.exe`. Внутри уже есть Python, отдельно ставить его не нужно.
+На выходе `desktop/dist/StarFlow-0.1.1.exe`. Внутри уже есть Python, отдельно ставить его не нужно.
 
 ## Лицензия
 

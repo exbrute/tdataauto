@@ -1,6 +1,6 @@
 {
   "name": "star-flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Desktop app for selling Telegram gifts from tdata and sending Stars to a channel post",
   "main": "src/main.js",

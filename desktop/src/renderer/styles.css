@@ -22,12 +22,7 @@ html, body {
 body {
   font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
   color: var(--text);
-  background:
-    radial-gradient(900px 520px at 8% 0%, #f0b07a 0%, transparent 60%),
-    radial-gradient(820px 560px at 100% 8%, #6eb0ea 0%, transparent 55%),
-    radial-gradient(700px 420px at 70% 100%, #c9a6e6 0%, transparent 60%),
-    linear-gradient(115deg, #e89a68 0%, #d7a9b8 42%, #8eb6e6 100%);
-  padding: 26px;
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -39,10 +34,7 @@ svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width:
   height: 100%;
   display: flex;
   background: var(--bg);
-  border-radius: 28px;
   overflow: hidden;
-  box-shadow: var(--shadow);
-  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .sidebar {
