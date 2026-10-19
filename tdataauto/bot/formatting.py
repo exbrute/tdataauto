@@ -46,7 +46,7 @@ def format_pool_summary(items: list[dict]) -> str:
         err = item.get("scan_error")
         suffix = f" ⚠️ {_esc(err)}" if err and not profile else ""
         lines.append(f"{index}. {_esc(label)} · ⭐ {stars}{suffix}")
-    lines.append("\n/run — продать подарки и отправить звёзды по всему пулу")
+    lines.append("\nКнопка «Запустить» — продать подарки и отправить звёзды по всему пулу")
     return "\n".join(lines)
 
 

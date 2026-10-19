@@ -7,11 +7,23 @@ import zipfile
 from pathlib import Path
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, F
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from tdataauto.bot.formatting import format_batch_report, format_pool_summary, format_profile_message
+from tdataauto.bot.keyboard import (
+    BTN_CANCEL,
+    BTN_CLEAR,
+    BTN_CLEARPASS,
+    BTN_LINK,
+    BTN_PASS,
+    BTN_POOL,
+    BTN_RUN,
+    BTN_STATUS,
+    BUTTONS,
+    main_keyboard,
+)
 from tdataauto.bot.pool import (
     allocate_entry_dir,
     append_entry,
@@ -73,24 +85,16 @@ async def _passcode(state: FSMContext) -> str | None:
 
 def _help_text(settings: Settings) -> str:
     proxy = _proxy_url()
-    proxy_line = f"\nПрокси (TDATA_PROXY): <code>{proxy}</code>" if proxy else (
-        "\nПрокси не задан — если Telegram недоступен, укажите <code>TDATA_PROXY=socks5://host:port</code> в .env"
+    proxy_line = (
+        f"\nПрокси: <code>{proxy}</code>"
+        if proxy
+        else "\nПрокси не задан — если Telegram недоступен, укажите TDATA_PROXY в .env"
     )
     return (
-        "Привет! Весь сценарий теперь в боте:\n\n"
-        "1️⃣ Ссылка на пост канала — команда /link или текст после /start\n"
-        "2️⃣ ZIP с <code>tdata</code> — автоматически сканирую профиль и кладу в пул\n"
-        "3️⃣ Можно прислать несколько ZIP подряд\n"
-        "4️⃣ /run — продажа подарков и перевод ⭐ на пост для <b>всего пула</b>\n\n"
-        "<b>Команды</b>\n"
-        "/pool — что в пуле\n"
-        "/run — обработать пул\n"
-        "/clearpool — очистить пул\n"
-        "/link URL — пост канала\n"
-        "/passcode пароль — локальный passcode Telegram Desktop\n"
-        "/clearpass — сброс passcode\n"
-        "/status — настройки .env\n"
-        "/cancel — сброс шага (пул не трогаю)\n\n"
+        "Весь сценарий на кнопках внизу.\n\n"
+        "1️⃣ «Ссылка на пост» — куда слать ⭐\n"
+        "2️⃣ ZIP с <code>tdata</code> — скан и добавление в пул (можно несколько)\n"
+        "3️⃣ «Запустить» — продажа подарков и перевод звёзд по всему пулу\n\n"
         f"SELL_MODE={settings.sell_mode}, KEEP_STARS={settings.keep_stars}{proxy_line}"
     )
 
@@ -107,92 +111,59 @@ async def run_bot(*, verbose: bool = False) -> None:
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
     dp.message.middleware(AdminGate())
+    kb = main_keyboard()
+
+    async def reply(message: Message, text: str, **kwargs) -> Message:
+        return await message.answer(text, reply_markup=kb, **kwargs)
 
     async def go_ready(message: Message, state: FSMContext) -> None:
         await state.set_state(BotFlow.ready)
         pool_size = len(load_pool(settings.data_dir, message.from_user.id))
-        extra = f"\n\n📦 В пуле сейчас: {pool_size}. Пришлите ZIP или /run." if pool_size else "\n\nПришлите ZIP с tdata."
-        await message.answer("Готов принимать архивы." + extra)
+        extra = (
+            f"\n\n📦 В пуле: {pool_size}. Пришлите ещё ZIP или нажмите «Запустить»."
+            if pool_size
+            else "\n\nПришлите ZIP с tdata."
+        )
+        await reply(message, "Готов принимать архивы." + extra)
 
-    @dp.message(CommandStart())
-    async def start(message: Message, state: FSMContext) -> None:
-        await message.answer(_help_text(settings), parse_mode="HTML")
-        if await _resolve_link(state, settings):
-            await go_ready(message, state)
-        else:
-            await state.set_state(BotFlow.waiting_link)
-            await message.answer("Пришлите ссылку на пост канала (https://t.me/…/123).")
-
-    @dp.message(Command("cancel"))
-    async def cancel(message: Message, state: FSMContext) -> None:
-        if await _resolve_link(state, settings):
-            await go_ready(message, state)
-        else:
-            await state.set_state(BotFlow.waiting_link)
-        await message.answer("Шаг отменён. Пул сохранён. /start — подсказки.")
-
-    @dp.message(Command("status"))
-    async def status(message: Message, state: FSMContext) -> None:
+    async def show_status(message: Message, state: FSMContext) -> None:
         link = await _resolve_link(state, settings)
-        await message.answer(
+        await reply(
+            message,
             f"SELL_MODE={settings.sell_mode}\n"
             f"RESELL_PRICE={settings.resell_price}\n"
             f"KEEP_STARS={settings.keep_stars}\n"
-            f"CHANNEL_POST_URL={link or settings.channel_post_url or '(не задан)'}\n"
-            f"TDATA_PROXY={_proxy_url() or '(не задан)'}\n"
-            f"Passcode в чате: {'да' if await _passcode(state) else 'нет'}",
+            f"Пост: {link or '(не задан)'}\n"
+            f"Прокси: {_proxy_url() or '(не задан)'}\n"
+            f"Passcode: {'задан' if await _passcode(state) else 'нет'}",
         )
 
-    @dp.message(Command("link"))
-    async def cmd_link(message: Message, state: FSMContext) -> None:
-        parts = (message.text or "").split(maxsplit=1)
-        if len(parts) < 2:
-            await message.answer("Пример: /link https://t.me/my_channel/42")
-            return
-        try:
-            parse_channel_post_url(parts[1])
-        except ValueError as exc:
-            await message.answer(str(exc))
-            return
-        await state.update_data(channel_link=parts[1].strip())
-        await go_ready(message, state)
+    async def show_pool(message: Message) -> None:
+        items = load_pool(settings.data_dir, message.from_user.id)
+        await reply(message, format_pool_summary(items), parse_mode="HTML")
 
-    @dp.message(Command("passcode"))
-    async def cmd_passcode(message: Message, state: FSMContext) -> None:
-        parts = (message.text or "").split(maxsplit=1)
-        if len(parts) < 2:
-            await message.answer("Пример: /passcode 1234\nСброс: /clearpass")
-            return
-        await state.update_data(tdata_passcode=parts[1])
-        await message.answer("Passcode сохранён для скана и /run.")
+    async def do_clear_pool(message: Message) -> None:
+        clear_pool(settings.data_dir, message.from_user.id)
+        await reply(message, "Пул очищен.")
 
-    @dp.message(Command("clearpass"))
-    async def cmd_clearpass(message: Message, state: FSMContext) -> None:
+    async def do_clear_pass(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
         data.pop("tdata_passcode", None)
         await state.set_data(data)
-        await message.answer("Passcode из чата удалён.")
+        if await _resolve_link(state, settings):
+            await state.set_state(BotFlow.ready)
+        await reply(message, "Passcode сброшен.")
 
-    @dp.message(Command("pool"))
-    async def cmd_pool(message: Message) -> None:
-        items = load_pool(settings.data_dir, message.from_user.id)
-        await message.answer(format_pool_summary(items), parse_mode="HTML")
-
-    @dp.message(Command("clearpool"))
-    async def cmd_clearpool(message: Message) -> None:
-        clear_pool(settings.data_dir, message.from_user.id)
-        await message.answer("Пул очищен.")
-
-    @dp.message(Command("run"))
-    async def cmd_run(message: Message, state: FSMContext) -> None:
+    async def do_run(message: Message, state: FSMContext) -> None:
         user_id = message.from_user.id
         items = load_pool(settings.data_dir, user_id)
         if not items:
-            await message.answer("Пул пуст. Сначала пришлите ZIP с tdata.")
+            await reply(message, "Пул пуст. Сначала пришлите ZIP с tdata.")
             return
         link = await _resolve_link(state, settings)
         if not link:
-            await message.answer("Сначала /link на пост канала (или CHANNEL_POST_URL в .env).")
+            await state.set_state(BotFlow.waiting_link)
+            await reply(message, "Сначала укажите ссылку на пост канала.")
             return
 
         roots: list[Path] = []
@@ -201,12 +172,10 @@ async def run_bot(*, verbose: bool = False) -> None:
             try:
                 roots.append(find_tdata_root(extracted))
             except FileNotFoundError:
-                await message.answer(f"❌ tdata не найден для {item.get('file_name', item['entry_id'])}")
+                await reply(message, f"❌ tdata не найден для {item.get('file_name', item['entry_id'])}")
                 return
 
-        status_msg = await message.answer(f"Обрабатываю пул ({len(roots)} акк.)…")
-        passcode = await _passcode(state)
-        proxy_url = _proxy_url()
+        status_msg = await reply(message, f"Обрабатываю пул ({len(roots)} акк.)…")
         try:
             batch = await run_batch(
                 roots,
@@ -216,8 +185,8 @@ async def run_bot(*, verbose: bool = False) -> None:
                 resell_price=settings.resell_price,
                 keep_stars=settings.keep_stars,
                 max_paid_reaction_batch=settings.max_paid_reaction_batch,
-                passcode=passcode,
-                proxy_url=proxy_url,
+                passcode=await _passcode(state),
+                proxy_url=_proxy_url(),
             )
             await status_msg.edit_text(format_batch_report(batch), parse_mode="HTML")
             if batch.succeeded:
@@ -226,33 +195,96 @@ async def run_bot(*, verbose: bool = False) -> None:
             logger.exception("run batch")
             await status_msg.edit_text(f"❌ Ошибка: {exc}")
 
+    async def do_cancel(message: Message, state: FSMContext) -> None:
+        if await _resolve_link(state, settings):
+            await go_ready(message, state)
+        else:
+            await state.set_state(BotFlow.waiting_link)
+            await reply(message, "Шаг отменён. Пул сохранён. Нажмите «Ссылка на пост».")
+
+    @dp.message(CommandStart())
+    async def start(message: Message, state: FSMContext) -> None:
+        await reply(message, _help_text(settings), parse_mode="HTML")
+        if await _resolve_link(state, settings):
+            await go_ready(message, state)
+        else:
+            await state.set_state(BotFlow.waiting_link)
+            await reply(message, "Нажмите «Ссылка на пост» и пришлите https://t.me/…/123")
+
+    @dp.message(F.text == BTN_STATUS)
+    async def on_status(message: Message, state: FSMContext) -> None:
+        await show_status(message, state)
+
+    @dp.message(F.text == BTN_POOL)
+    async def on_pool(message: Message) -> None:
+        await show_pool(message)
+
+    @dp.message(F.text == BTN_CLEAR)
+    async def on_clear(message: Message) -> None:
+        await do_clear_pool(message)
+
+    @dp.message(F.text == BTN_CLEARPASS)
+    async def on_clearpass(message: Message, state: FSMContext) -> None:
+        await do_clear_pass(message, state)
+
+    @dp.message(F.text == BTN_RUN)
+    async def on_run(message: Message, state: FSMContext) -> None:
+        await do_run(message, state)
+
+    @dp.message(F.text == BTN_CANCEL)
+    async def on_cancel(message: Message, state: FSMContext) -> None:
+        await do_cancel(message, state)
+
+    @dp.message(F.text == BTN_LINK)
+    async def on_ask_link(message: Message, state: FSMContext) -> None:
+        await state.set_state(BotFlow.waiting_link)
+        await reply(message, "Пришлите ссылку на пост: https://t.me/канал/123")
+
+    @dp.message(F.text == BTN_PASS)
+    async def on_ask_pass(message: Message, state: FSMContext) -> None:
+        await state.set_state(BotFlow.waiting_passcode)
+        await reply(message, "Пришлите локальный пароль Telegram Desktop одним сообщением.")
+
+    @dp.message(BotFlow.waiting_passcode, F.text)
+    async def on_passcode(message: Message, state: FSMContext) -> None:
+        text = (message.text or "").strip()
+        if text in BUTTONS:
+            return
+        await state.update_data(tdata_passcode=text)
+        await reply(message, "Passcode сохранён.")
+        if await _resolve_link(state, settings):
+            await go_ready(message, state)
+        else:
+            await state.set_state(BotFlow.waiting_link)
+
     @dp.message(BotFlow.waiting_link, F.text)
     async def on_link(message: Message, state: FSMContext) -> None:
-        if message.text and message.text.startswith("/"):
+        text = (message.text or "").strip()
+        if text in BUTTONS:
             return
         try:
-            parse_channel_post_url(message.text or "")
+            parse_channel_post_url(text)
         except ValueError as exc:
-            await message.answer(str(exc))
+            await reply(message, str(exc))
             return
-        await state.update_data(channel_link=message.text.strip())
+        await state.update_data(channel_link=text)
         await go_ready(message, state)
 
-    @dp.message(BotFlow.ready, F.document)
-    @dp.message(BotFlow.waiting_link, F.document)
+    @dp.message(F.document)
     async def on_archive(message: Message, state: FSMContext) -> None:
         link = await _resolve_link(state, settings)
         if not link:
-            await message.answer("Сначала ссылка на пост: текстом или /link …")
+            await state.set_state(BotFlow.waiting_link)
+            await reply(message, "Сначала укажите ссылку на пост кнопкой «Ссылка на пост».")
             return
         await state.set_state(BotFlow.ready)
 
         doc = message.document
         if not doc or not doc.file_name:
-            await message.answer("Не удалось прочитать файл.")
+            await reply(message, "Не удалось прочитать файл.")
             return
         if not doc.file_name.lower().endswith(".zip"):
-            await message.answer("Нужен ZIP-архив с папкой tdata.")
+            await reply(message, "Нужен ZIP-архив с папкой tdata.")
             return
 
         user_id = message.from_user.id
@@ -260,20 +292,17 @@ async def run_bot(*, verbose: bool = False) -> None:
         archive_path = work_dir / doc.file_name
         extracted = work_dir / "extracted"
 
-        status_msg = await message.answer("Скачиваю архив…")
+        status_msg = await reply(message, "Скачиваю архив…")
         try:
             await bot.download(doc, destination=archive_path)
             _extract_archive(archive_path, extracted)
             session_file = sessions / f"bot_{user_id}_{entry_id}.session"
-            passcode = await _passcode(state)
-            proxy_url = _proxy_url()
-
             await status_msg.edit_text("Сканирую аккаунт (⭐, NFT, админки, боты)…")
             profile, scan_error = await inspect_tdata_path(
                 extracted,
                 session_file,
-                passcode=passcode,
-                proxy_url=proxy_url,
+                passcode=await _passcode(state),
+                proxy_url=_proxy_url(),
             )
             entry = new_pool_entry(
                 entry_id=entry_id,
@@ -283,7 +312,7 @@ async def run_bot(*, verbose: bool = False) -> None:
             )
             items = append_entry(settings.data_dir, user_id, entry)
             text = format_profile_message(profile, scan_error=scan_error)
-            text += f"\n\n📦 В пуле: <b>{len(items)}</b>. Ещё ZIP или /run"
+            text += f"\n\n📦 В пуле: <b>{len(items)}</b>. Ещё ZIP или «Запустить»"
             await status_msg.edit_text(text, parse_mode="HTML")
         except Exception as exc:
             logger.exception("upload")
@@ -292,23 +321,20 @@ async def run_bot(*, verbose: bool = False) -> None:
 
     @dp.message(BotFlow.ready, F.text)
     async def on_text_ready(message: Message, state: FSMContext) -> None:
-        if message.text and message.text.startswith("/"):
+        text = (message.text or "").strip()
+        if text in BUTTONS:
             return
         try:
-            parse_channel_post_url(message.text or "")
+            parse_channel_post_url(text)
         except ValueError:
-            await message.answer("Пришлите ZIP или команду. Ссылка: /link …")
+            await reply(message, "Пришлите ZIP или нажмите кнопку внизу.")
             return
-        await state.update_data(channel_link=message.text.strip())
-        await message.answer("Ссылка на пост обновлена.")
+        await state.update_data(channel_link=text)
+        await reply(message, "Ссылка на пост обновлена.")
 
-    @dp.message(BotFlow.waiting_link)
-    async def need_link(message: Message) -> None:
-        await message.answer("Жду ссылку на пост канала (https://t.me/…/123).")
-
-    @dp.message(BotFlow.ready)
-    async def need_zip(message: Message) -> None:
-        await message.answer("Пришлите ZIP с tdata или /pool, /run.")
+    @dp.message()
+    async def fallback(message: Message) -> None:
+        await reply(message, "Нажмите кнопку внизу или пришлите ZIP с tdata.")
 
     logger.info("Бот запущен")
     await dp.start_polling(bot)
