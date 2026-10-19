@@ -1,0 +1,875 @@
+const state = {
+  view: "accounts",
+  settings: {},
+  history: [],
+  library: { pool: [], folders: [], proxies: [] },
+  sessions: [],
+  running: false,
+  botRunning: false,
+  query: "",
+  pythonOk: null,
+};
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
+
+function matchesQuery(text) {
+  const query = state.query.trim().toLowerCase();
+  return !query || String(text).toLowerCase().includes(query);
+}
+
+const $ = (id) => document.getElementById(id);
+
+const HEAT_ROWS = [
+  { label: "9 am", hours: [8, 9] },
+  { label: "11 am", hours: [10, 11] },
+  { label: "12 pm", hours: [12] },
+  { label: "1 pm", hours: [13] },
+  { label: "2 pm", hours: [14, 15] },
+  { label: "3 pm", hours: [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23] },
+];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const PALETTE = ["#3a2422", "#6d2e24", "#c2412c", "#ff4d2a", "#ff7a45"];
+
+function money(value) {
+  return new Intl.NumberFormat("en-US").format(Number(value) || 0);
+}
+
+function filteredHistory() {
+  const q = state.query.trim().toLowerCase();
+  if (!q) return state.history;
+  return state.history.filter((item) =>
+    `${item.name} ${item.link} ${item.tdataPath}`.toLowerCase().includes(q),
+  );
+}
+
+function okRuns() {
+  return filteredHistory().filter((item) => item.ok && item.result);
+}
+
+function runStats(item) {
+  const result = item.result || {};
+  if (item.batch) {
+    return {
+      stars_sent: result.stars_sent || 0,
+      converted: result.gifts_converted || 0,
+      listed: result.nft_listed || 0,
+      stars_after: 0,
+    };
+  }
+  return {
+    stars_sent: result.stars_sent || 0,
+    converted: result.converted || 0,
+    listed: result.listed || 0,
+    stars_after: result.stars_after || 0,
+  };
+}
+
+function sum(list, pick) {
+  return list.reduce((total, item) => total + Number(pick(item) || 0), 0);
+}
+
+function trend(current, previous) {
+  if (!previous) return { cls: "flat", text: "0%" };
+  const delta = ((current - previous) / Math.abs(previous)) * 100;
+  if (!Number.isFinite(delta) || Math.abs(delta) < 0.05) return { cls: "flat", text: "0%" };
+  const cls = delta > 0 ? "up" : "down";
+  const arrow = delta > 0 ? "↗" : "↘";
+  return { cls, text: `${arrow} ${Math.abs(delta).toFixed(1)}%` };
+}
+
+function rangeLabel() {
+  const items = filteredHistory();
+  if (!items.length) return "Запусков пока нет";
+  const dates = items.map((item) => new Date(item.at)).sort((a, b) => a - b);
+  const fmt = (date) =>
+    date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return `${fmt(dates[0])} — ${fmt(dates[dates.length - 1])}`;
+}
+
+function metricCard(label, value, trendInfo, sub) {
+  return `<article class="metric">
+    <div class="label-row"><span class="label">${label}</span><span class="trend ${trendInfo.cls}">${trendInfo.text}</span></div>
+    <div class="value">${value}</div>
+    <div class="sub">${sub}</div>
+  </article>`;
+}
+
+function renderMetrics(target) {
+  const runs = okRuns();
+  const sent = sum(runs, (item) => runStats(item).stars_sent);
+  const converted = sum(runs, (item) => runStats(item).converted);
+  const accounts = runs.reduce(
+    (total, item) => total + (item.batch ? item.result?.loaded || item.poolSize || 0 : 1),
+    0,
+  );
+  const success = filteredHistory().length
+    ? (runs.length / filteredHistory().length) * 100
+    : 0;
+  const prevSuccess = state.history.length > 1 ? 50 : 0;
+  const html = [
+    metricCard(
+      "Отправлено звёзд",
+      money(sent),
+      trend(runStats(runs[0] || {}).stars_sent, runStats(runs[1] || {}).stars_sent),
+      rangeLabel(),
+    ),
+    metricCard(
+      "Подарки в звёзды",
+      money(converted),
+      trend(runStats(runs[0] || {}).converted, runStats(runs[1] || {}).converted),
+      rangeLabel(),
+    ),
+    metricCard("Аккаунты", money(accounts), trend(accounts, Math.max(accounts - 1, 0)), rangeLabel()),
+    metricCard("Успешные запуски", `${success.toFixed(1)} %`, trend(success, prevSuccess || success), rangeLabel()),
+  ].join("");
+  $(target).innerHTML = html;
+}
+
+function heatColor(value, max) {
+  if (!value || !max) return "#2a2a2a";
+  const index = Math.min(PALETTE.length - 1, Math.ceil((value / max) * (PALETTE.length - 1)));
+  return PALETTE[index];
+}
+
+function renderHeatmap() {
+  const grid = HEAT_ROWS.map(() => DAYS.map(() => 0));
+  for (const item of filteredHistory()) {
+    const date = new Date(item.at);
+    const day = (date.getDay() + 6) % 7;
+    const row = HEAT_ROWS.findIndex((band) => band.hours.includes(date.getHours()));
+    if (row >= 0) grid[row][day] += 1;
+  }
+  const max = Math.max(1, ...grid.flat());
+  const rows = HEAT_ROWS.map((band) => `<div class="heat-label">${band.label}</div>`).join("");
+  const cells = grid
+    .flatMap((row, rowIndex) =>
+      row.map((value, col) => {
+        const hatched = value > 0 && (rowIndex + col) % 3 === 0 ? " hatched" : "";
+        return `<div class="cell${hatched}" style="background-color:${heatColor(value, max)}" title="${DAYS[col]} ${HEAT_ROWS[rowIndex].label}: ${value}"></div>`;
+      }),
+    )
+    .join("");
+  $("heatmap").innerHTML = `
+    <div class="heat-rows">${rows}</div>
+    <div class="heat-grid">${cells}</div>
+    <div class="col-labels"><div></div><div>${DAYS.map((day) => `<span>${day}</span>`).join("")}</div></div>`;
+  $("heat-legend").innerHTML = [
+    ["#6d2e24", "1"],
+    ["#c2412c", "2"],
+    ["#ff4d2a", "3+"],
+  ]
+    .map(([color, label]) => `<span><i class="dot" style="background:${color}"></i>${label}</span>`)
+    .join("");
+}
+
+function niceMax(value) {
+  if (value <= 0) return 100;
+  const pow = 10 ** Math.floor(Math.log10(value));
+  const fraction = value / pow;
+  const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  return nice * pow;
+}
+
+function chartModel(items) {
+  const points = items.slice(0, 8).reverse();
+  const raw = Math.max(
+    0,
+    ...points.flatMap((item) => {
+      const stats = runStats(item);
+      return [stats.stars_sent, stats.stars_after];
+    }),
+  );
+  return { points, max: niceMax(raw) };
+}
+
+function smooth(points) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i === 0 ? i : i - 1];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    path += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+  }
+  return path;
+}
+
+function renderChart(target, tall) {
+  const items = okRuns();
+  const { points, max } = chartModel(items);
+  const width = 640;
+  const height = tall ? 260 : 230;
+  const pad = { l: 42, r: 12, t: 16, b: 28 };
+  const innerW = width - pad.l - pad.r;
+  const innerH = height - pad.t - pad.b;
+  const yOf = (value) => pad.t + innerH - (value / max) * innerH;
+  const xOf = (index) =>
+    pad.l + (points.length <= 1 ? innerW / 2 : (index / (points.length - 1)) * innerW);
+  const sent = points.map((item, index) => ({ x: xOf(index), y: yOf(runStats(item).stars_sent) }));
+  const left = points.map((item, index) => ({ x: xOf(index), y: yOf(runStats(item).stars_after) }));
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((part) => {
+    const value = max * part;
+    const y = yOf(value);
+    const label = Number.isInteger(value) ? String(value) : String(Math.round(value));
+    return `<text x="0" y="${y + 4}">${label}</text><line x1="${pad.l}" y1="${y}" x2="${width - pad.r}" y2="${y}" stroke="rgba(255,255,255,.04)" />`;
+  });
+  const labels = points
+    .map((item, index) => {
+      const label = new Date(item.at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      return `<text x="${xOf(index)}" y="${height - 8}" text-anchor="middle">${label}</text>`;
+    })
+    .join("");
+  const last = sent[sent.length - 1];
+  const tip = last
+    ? `<line x1="${last.x}" y1="${pad.t}" x2="${last.x}" y2="${pad.t + innerH}" stroke="rgba(255,255,255,.25)" stroke-dasharray="3 3" />
+       <circle cx="${last.x}" cy="${last.y}" r="4" fill="#ff4d2a" />
+       <circle cx="${left[left.length - 1].x}" cy="${left[left.length - 1].y}" r="4" fill="#8d8d93" />`
+    : "";
+  $(target).innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+    ${yTicks.join("")}
+    <path d="${smooth(left)}" fill="none" stroke="#8d8d93" stroke-width="2.5" />
+    <path d="${smooth(sent)}" fill="none" stroke="#ff5a36" stroke-width="2.5" />
+    ${tip}
+    ${labels}
+  </svg>`;
+}
+
+function growthCell(item, index, list) {
+  const prev = list[index + 1];
+  if (!item.result || !prev?.result) return `<td class="grow flat">—</td>`;
+  const info = trend(runStats(item).stars_sent, runStats(prev).stars_sent);
+  return `<td class="grow ${info.cls}">${info.text}</td>`;
+}
+
+function tableHtml(items, limit) {
+  const rows = (limit ? items.slice(0, limit) : items);
+  if (!rows.length) {
+    return `<table><tr><td>Аккаунтов пока нет. Выберите tdata на вкладке «Аккаунты».</td></tr></table>`;
+  }
+  const body = rows
+    .map((item, index) => {
+      const stats = runStats(item);
+      return `<tr>
+        <td class="name">${escapeHtml(item.name || "tdata")}</td>
+        <td>${item.ok ? money(stats.stars_sent) : "—"}</td>
+        <td>${item.ok ? money(stats.converted) : "—"}</td>
+        ${growthCell(item, index, rows)}
+        <td>${item.ok ? money(stats.listed) : "—"}</td>
+        <td>${item.ok ? money(stats.stars_after) : escapeHtml(item.error || "ошибка")}</td>
+      </tr>`;
+    })
+    .join("");
+  return `<table>
+    <thead><tr><th>АККАУНТ</th><th>ЗВЁЗДЫ</th><th>ПОДАРКИ</th><th>РОСТ</th><th>NFT</th><th>ОСТАТОК</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
+}
+
+function renderAccounts() {
+  const items = okRuns().slice(0, 6);
+  const colors = ["#1f3b73", "#7a1f2b", "#0e6b4a", "#8a5a12", "#5a2d82", "#114e7a"];
+  const cards = (items.length ? items : Array.from({ length: 6 }, () => null))
+    .map((item, index) => {
+      if (!item) {
+        return `<article class="account"><div class="flag" style="background:#2a2a2a"></div><b>—</b><span>нет данных</span></article>`;
+      }
+      const code = (item.name || "TD").replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "TD";
+      return `<article class="account">
+        <div class="flag" style="background:${colors[index % colors.length]}">${code}</div>
+        <b>${item.name}</b>
+        <span>${money(runStats(item).stars_sent)} ⭐ · ${runStats(item).converted} подарков</span>
+      </article>`;
+    })
+    .join("");
+  $("account-grid").innerHTML = cards;
+  $("accounts-table").innerHTML = tableHtml(filteredHistory());
+}
+
+function resolveProxyForRun() {
+  const proxies = state.library.proxies || [];
+  const selectedId = $("run-proxy")?.value || state.settings.defaultProxyId || "";
+  let proxy = selectedId ? proxies.find((item) => item.id === selectedId) : null;
+  if (!proxy && proxies.length === 1) {
+    proxy = proxies[0];
+  }
+  return proxy;
+}
+
+function inspectProxyUrl() {
+  const proxy = resolveProxyForRun();
+  return proxy ? proxyUrl(proxy) : "";
+}
+
+function sessionStatusLabel(item) {
+  if (item.scanStatus === "scanning") return "Сканирование…";
+  if (item.scanStatus === "error") return item.scanError || "Ошибка";
+  if (item.profile) return "Готово";
+  return "В очереди";
+}
+
+function renderSessions() {
+  const pool = (state.library.pool || []).filter((item) => {
+    const p = item.profile;
+    const haystack = [
+      poolLabel(item.path),
+      item.path,
+      p?.account?.name,
+      p?.account?.username,
+      ...(p?.bots || []).map((bot) => bot.username),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return matchesQuery(haystack);
+  });
+  const table = $("sessions-table");
+  if (!table) return;
+  if (!pool.length) {
+    table.innerHTML = `<table><tr><td>Нет загруженных tdata. Добавьте их на вкладке «Аккаунты».</td></tr></table>`;
+    return;
+  }
+  const body = pool
+    .map((item) => {
+      const p = item.profile;
+      const acc = p?.account || {};
+      const gifts = p?.gifts || {};
+      const bots = (p?.bots || []).map((bot) => `@${bot.username}`).join(", ") || "—";
+      const username = acc.username ? `@${acc.username}` : "—";
+      return `<tr>
+        <td class="name">${escapeHtml(poolLabel(item.path))}</td>
+        <td>${escapeHtml(acc.name || "—")}</td>
+        <td>${escapeHtml(username)}</td>
+        <td>${acc.premium ? "Да" : p ? "Нет" : "—"}</td>
+        <td>${p ? money(p.stars) : "—"}</td>
+        <td>${p ? money(gifts.nft || 0) : "—"}</td>
+        <td>${p ? money(p.admin_chats || 0) : "—"}</td>
+        <td>${p ? money(p.admin_channels || 0) : "—"}</td>
+        <td>${escapeHtml(bots)}</td>
+        <td>${escapeHtml(sessionStatusLabel(item))}</td>
+        <td><button class="btn small" type="button" data-action="rescan-pool" data-id="${escapeHtml(item.id)}">↻</button></td>
+      </tr>`;
+    })
+    .join("");
+  table.innerHTML = `<table>
+    <thead><tr>
+      <th>TDATA</th><th>ИМЯ</th><th>USERNAME</th><th>PREMIUM</th><th>⭐</th><th>NFT</th>
+      <th>АДМ. ЧАТЫ</th><th>АДМ. КАНАЛЫ</th><th>БОТЫ</th><th>СТАТУС</th><th></th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
+}
+
+function renderFolders() {
+  const items = state.library.folders.filter((item) => matchesQuery(item.path));
+  $("folder-list").innerHTML = items.length
+    ? items
+        .map(
+          (item) => `<div class="list-row"><div><b>${escapeHtml(item.path.split(/[\\/]/).pop() || item.path)}</b><span>${escapeHtml(item.path)}</span></div><div class="row"><button class="btn small" type="button" data-action="use-folder" data-path="${escapeHtml(item.path)}">Открыть</button><button class="btn small danger" type="button" data-action="delete-folder" data-id="${escapeHtml(item.id)}">Удалить</button></div></div>`,
+        )
+        .join("")
+    : `<p class="muted">Папок нет. Добавьте каталог с tdata.</p>`;
+}
+
+function renderProxies() {
+  const items = state.library.proxies.filter((item) => matchesQuery(`${item.label} ${item.host} ${item.type}`));
+  $("proxy-list").innerHTML = items.length
+    ? items
+        .map(
+          (item) => `<div class="list-row"><div><b>${escapeHtml(item.label || item.host)}</b><span>${escapeHtml(item.type)} · ${escapeHtml(item.host)}:${escapeHtml(item.port)}</span></div><button class="btn small danger" type="button" data-action="delete-proxy" data-id="${escapeHtml(item.id)}">Удалить</button></div>`,
+        )
+        .join("")
+    : `<p class="muted">Прокси нет. Можно работать напрямую.</p>`;
+}
+
+function poolLabel(filePath) {
+  const base = String(filePath || "").split(/[\\/]/).pop() || filePath;
+  return base || "tdata";
+}
+
+function renderPool() {
+  const pool = state.library.pool || [];
+  $("pool-count").textContent = `${pool.length} ${pool.length === 1 ? "аккаунт" : pool.length < 5 ? "аккаунта" : "аккаунтов"}`;
+  $("pool-list").innerHTML = pool.length
+    ? pool
+        .map(
+          (item) => `<div class="list-row"><div><b>${escapeHtml(poolLabel(item.path))}</b><span>${escapeHtml(item.path)}</span></div><button class="btn small danger" type="button" data-action="remove-pool" data-id="${escapeHtml(item.id)}">Убрать</button></div>`,
+        )
+        .join("")
+    : `<p class="muted">Пул пуст. Добавьте папку или ZIP.</p>`;
+}
+
+function renderLogsConsole() {
+  const items = filteredHistory();
+  let totalAccounts = 0;
+  let totalStars = 0;
+  let totalNft = 0;
+  let totalConverted = 0;
+  const lines = [];
+  for (const item of items) {
+    const stats = runStats(item);
+    if (item.batch && item.result) {
+      totalAccounts += item.result.loaded || item.poolSize || 0;
+    } else if (item.ok) {
+      totalAccounts += 1;
+    }
+    if (item.ok) {
+      totalStars += stats.stars_sent;
+      totalNft += stats.listed;
+      totalConverted += stats.converted;
+    }
+    const when = new Date(item.at).toLocaleString("ru-RU");
+    if (item.batch && item.result) {
+      lines.push(
+        `[${when}] ${item.name} · ok=${item.ok} · звёзд=${stats.stars_sent} · NFT=${stats.listed} · подарков=${stats.converted} · успешно ${item.result.succeeded}/${item.result.loaded}`,
+      );
+      for (const acc of item.result.accounts || []) {
+        if (acc.ok && acc.result) {
+          lines.push(
+            `    ${acc.name}: ⭐${acc.result.stars_sent} · nft=${acc.result.listed} · gifts=${acc.result.converted}`,
+          );
+        } else {
+          lines.push(`    ${acc.name}: ОШИБКА ${acc.error || "—"}`);
+        }
+      }
+    } else {
+      lines.push(
+        `[${when}] ${item.name} · ok=${item.ok} · звёзд=${stats.stars_sent} · NFT=${stats.listed} · подарков=${stats.converted}`,
+      );
+    }
+  }
+  const summary = [
+    "=== Сводка ===",
+    `Аккаунтов обработано: ${totalAccounts}`,
+    `Звёзд списано (на пост): ${money(totalStars)}`,
+    `NFT на витрине: ${totalNft}`,
+    `Подарков конвертировано: ${totalConverted}`,
+    "",
+    "=== Журнал ===",
+  ].join("\n");
+  const node = $("logs-console");
+  if (node) node.textContent = lines.length ? `${summary}\n${lines.join("\n")}` : `${summary}\n(запусков пока нет)`;
+}
+
+function renderLists() {
+  renderSessions();
+  renderFolders();
+  renderProxies();
+  renderPool();
+}
+
+function fillProxySelect() {
+  const select = $("run-proxy");
+  const current = select.value;
+  select.innerHTML = [`<option value="">Без прокси</option>`]
+    .concat(
+      state.library.proxies.map(
+        (item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || `${item.host}:${item.port}`)}</option>`,
+      ),
+    )
+    .join("");
+  const preferred =
+    current ||
+    state.settings.defaultProxyId ||
+    (state.library.proxies.length === 1 ? state.library.proxies[0].id : "");
+  if ([...select.options].some((option) => option.value === preferred)) select.value = preferred;
+}
+
+function proxyUrl(proxy) {
+  const auth = proxy.username
+    ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password || "")}@`
+    : "";
+  return `${proxy.type}://${auth}${proxy.host}:${proxy.port}`;
+}
+
+async function persistLibrary() {
+  state.library = await window.desktop.saveLibrary(state.library);
+  fillProxySelect();
+  renderLists();
+}
+
+function renderAll() {
+  renderMetrics("metrics");
+  renderMetrics("gift-metrics");
+  renderHeatmap();
+  renderChart("chart", false);
+  renderAccounts();
+  renderLists();
+  renderLogsConsole();
+  $("dash-table").innerHTML = tableHtml(filteredHistory(), 4);
+  const failed = state.history.some((item) => !item.ok);
+  $("bell-dot").hidden = !failed;
+}
+
+function showView(name) {
+  state.view = name;
+  document.querySelectorAll(".view").forEach((view) => {
+    view.hidden = view.id !== `view-${name}`;
+  });
+  document.querySelectorAll(".nav-btn").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === name);
+  });
+}
+
+function parseLink(url) {
+  const match = String(url || "")
+    .trim()
+    .match(/^https?:\/\/(?:t(?:elegram)?\.me|telegram\.dog)\/(?:c\/(\d+)\/(\d+)|([A-Za-z0-9_]{4,})\/(\d+))\/?(?:\?.*)?$/i);
+  if (!match) return null;
+  if (match[1]) return { peer: `-100${match[1]}`, msgId: match[2] };
+  return { peer: `@${match[3]}`, msgId: match[4] };
+}
+
+function paintLink(inputId, previewId) {
+  const parsed = parseLink($(inputId).value);
+  $(previewId).textContent = parsed
+    ? `Пост ${parsed.peer}, сообщение ${parsed.msgId}`
+    : "Нужна ссылка вида https://t.me/channel/32";
+}
+
+function fillForms() {
+  const settings = state.settings;
+  $("run-link").value = settings.channelPostUrl || "";
+  $("channel-link").value = settings.channelPostUrl || "";
+  $("run-mode").value = settings.sellMode || "both";
+  $("run-price").value = settings.resellPrice ?? 0;
+  $("run-keep").value = settings.keepStars ?? 0;
+  $("set-api-id").value = settings.apiId || "";
+  $("set-api-hash").value = settings.apiHash || "";
+  $("set-token").value = settings.botToken || "";
+  $("set-batch").value = settings.maxBatch ?? 2500;
+  paintLink("run-link", "link-preview");
+  paintLink("channel-link", "channel-preview");
+}
+
+function collectSettings() {
+  return {
+    channelPostUrl: $("channel-link").value.trim() || $("run-link").value.trim(),
+    sellMode: $("run-mode").value,
+    resellPrice: Number($("run-price").value || 0),
+    keepStars: Number($("run-keep").value || 0),
+    maxBatch: Number($("set-batch").value || 2500),
+    apiId: $("set-api-id").value.trim(),
+    apiHash: $("set-api-hash").value.trim(),
+    botToken: $("set-token").value.trim(),
+    defaultProxyId: state.settings.defaultProxyId || $("run-proxy").value || "",
+  };
+}
+
+function appendLog(id, line) {
+  const node = $(id);
+  node.textContent += `${line}\n`;
+  node.scrollTop = node.scrollHeight;
+}
+
+async function inspectPoolItem(poolId) {
+  const { library } = await window.desktop.inspectPool({
+    poolId,
+    passcode: $("run-pass").value,
+    proxyUrl: inspectProxyUrl(),
+  });
+  state.library = library;
+  renderLists();
+}
+
+async function scheduleMissingPoolScans() {
+  for (const item of state.library.pool || []) {
+    if (!item.profile && item.scanStatus !== "scanning") {
+      inspectPoolItem(item.id).catch((error) => appendLog("log", error.message || String(error)));
+    }
+  }
+}
+
+async function addToPool(filePath) {
+  const path = String(filePath || "").trim();
+  if (!path) return;
+  if (!state.library.pool) state.library.pool = [];
+  const existing = state.library.pool.find((item) => item.path === path);
+  if (existing) {
+    inspectPoolItem(existing.id).catch((error) => appendLog("log", error.message || String(error)));
+    return;
+  }
+  const entry = {
+    id: String(Date.now()) + Math.random().toString(36).slice(2, 6),
+    path,
+    addedAt: new Date().toISOString(),
+    scanStatus: "pending",
+  };
+  state.library.pool.unshift(entry);
+  await persistLibrary();
+  inspectPoolItem(entry.id).catch((error) => appendLog("log", error.message || String(error)));
+}
+
+async function boot() {
+  const today = new Date();
+  $("today").textContent = today.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const snapshot = await window.desktop.getState();
+  state.settings = snapshot.settings;
+  state.history = snapshot.history || [];
+  state.library = snapshot.library || state.library;
+  if (!Array.isArray(state.library.pool)) state.library.pool = [];
+  delete state.library.admins;
+  delete state.library.adminScans;
+  state.sessions = snapshot.sessions || [];
+  state.botRunning = snapshot.botRunning;
+  fillForms();
+  fillProxySelect();
+  renderAll();
+  const initialView = new URLSearchParams(window.location.search).get("view");
+  if (initialView) showView(initialView);
+  $("bot-state").textContent = state.botRunning ? "Запущен" : "Остановлен";
+  $("bot-toggle").textContent = state.botRunning ? "Остановить бота" : "Запустить бота";
+  const python = await window.desktop.checkPython();
+  state.pythonOk = python.ok;
+  $("python-status").textContent = python.ok
+    ? `Python готов: ${snapshot.python}`
+    : `Python-зависимости не найдены. Выполните pip install -r requirements.txt. ${python.error || ""}`;
+  scheduleMissingPoolScans();
+}
+
+document.querySelectorAll(".nav-btn").forEach((button) => {
+  button.addEventListener("click", () => showView(button.dataset.view));
+});
+document.querySelectorAll("[data-jump]").forEach((button) => {
+  button.addEventListener("click", () => showView(button.dataset.jump));
+});
+
+$("search").addEventListener("input", (event) => {
+  state.query = event.target.value;
+  renderAll();
+});
+$("run-link").addEventListener("input", () => {
+  $("channel-link").value = $("run-link").value;
+  paintLink("run-link", "link-preview");
+  paintLink("channel-link", "channel-preview");
+});
+$("channel-link").addEventListener("input", () => {
+  $("run-link").value = $("channel-link").value;
+  paintLink("channel-link", "channel-preview");
+  paintLink("run-link", "link-preview");
+});
+
+$("run-proxy").addEventListener("change", async () => {
+  const id = $("run-proxy").value;
+  if (!id) return;
+  state.settings = await window.desktop.saveSettings({ ...collectSettings(), defaultProxyId: id });
+});
+
+$("pick-folder").addEventListener("click", async () => addToPool(await window.desktop.pickFolder()));
+$("pick-zip").addEventListener("click", async () => addToPool(await window.desktop.pickZip()));
+
+const drop = $("drop");
+["dragenter", "dragover"].forEach((name) =>
+  drop.addEventListener(name, (event) => {
+    event.preventDefault();
+    drop.classList.add("drag");
+  }),
+);
+["dragleave", "drop"].forEach((name) =>
+  drop.addEventListener(name, (event) => {
+    event.preventDefault();
+    drop.classList.remove("drag");
+  }),
+);
+drop.addEventListener("drop", (event) => {
+  const file = event.dataTransfer.files?.[0];
+  if (file) addToPool(window.desktop.getPathForFile(file));
+});
+
+$("save-channel").addEventListener("click", async () => {
+  state.settings = await window.desktop.saveSettings({
+    ...collectSettings(),
+    channelPostUrl: $("channel-link").value.trim(),
+  });
+  fillForms();
+});
+
+$("save-settings").addEventListener("click", async () => {
+  state.settings = await window.desktop.saveSettings(collectSettings());
+  fillForms();
+  appendLog("bot-log", "Настройки сохранены");
+});
+
+$("run-btn").addEventListener("click", async () => {
+  if (state.running) return;
+  if (!parseLink($("run-link").value)) {
+    appendLog("log", "Ссылка на пост не распознана");
+    return;
+  }
+  const poolPaths = (state.library.pool || []).map((item) => item.path);
+  if (!poolPaths.length) {
+    appendLog("log", "Пул пуст — добавьте папку или ZIP");
+    return;
+  }
+  state.running = true;
+  $("run-btn").disabled = true;
+  $("run-state").textContent = "Обработка…";
+  state.settings = await window.desktop.saveSettings({
+    ...collectSettings(),
+    channelPostUrl: $("run-link").value.trim(),
+  });
+  try {
+    const proxy = resolveProxyForRun();
+    $("log").textContent = "";
+    const done = await window.desktop.runBatch({
+      tdataPaths: poolPaths,
+      link: $("run-link").value.trim(),
+      passcode: $("run-pass").value,
+      proxyUrl: proxy ? proxyUrl(proxy) : "",
+      settings: state.settings,
+    });
+    state.history = done.history;
+    renderAll();
+    $("run-state").textContent = done.entry.ok ? "Готово" : "Ошибка";
+    if (done.entry.ok) {
+      window.desktop
+        .inspectPoolAll({ passcode: $("run-pass").value, proxyUrl: inspectProxyUrl() })
+        .then((library) => {
+          state.library = library;
+          renderLists();
+        })
+        .catch((error) => appendLog("log", error.message || String(error)));
+    }
+  } catch (error) {
+    appendLog("log", error.message || String(error));
+    $("run-state").textContent = "Ошибка";
+  } finally {
+    state.running = false;
+    $("run-btn").disabled = false;
+    $("run-pass").value = "";
+  }
+});
+
+$("bot-toggle").addEventListener("click", async () => {
+  try {
+    if (state.botRunning) {
+      await window.desktop.stopBot();
+      state.botRunning = false;
+    } else {
+      state.settings = await window.desktop.saveSettings(collectSettings());
+      await window.desktop.startBot();
+      state.botRunning = true;
+    }
+  } catch (error) {
+    appendLog("bot-log", error.message || String(error));
+  }
+  $("bot-state").textContent = state.botRunning ? "Запущен" : "Остановлен";
+  $("bot-toggle").textContent = state.botRunning ? "Остановить бота" : "Запустить бота";
+});
+
+$("clear-history").addEventListener("click", async () => {
+  state.history = await window.desktop.clearHistory();
+  renderAll();
+});
+
+$("bell").addEventListener("click", () => showView("logs"));
+
+$("refresh-sessions").addEventListener("click", async () => {
+  try {
+    state.library = await window.desktop.inspectPoolAll({
+      passcode: $("run-pass").value,
+      proxyUrl: inspectProxyUrl(),
+    });
+    renderLists();
+  } catch (error) {
+    appendLog("log", error.message || String(error));
+  }
+});
+
+$("add-folder").addEventListener("click", async () => {
+  const folder = await window.desktop.pickFolder();
+  if (!folder) return;
+  state.library.folders.unshift({ id: String(Date.now()), path: folder, addedAt: new Date().toISOString() });
+  await persistLibrary();
+});
+
+$("add-proxy").addEventListener("click", async () => {
+  const host = $("proxy-host").value.trim();
+  const port = Number($("proxy-port").value);
+  if (!host || !port) {
+    $("proxy-list").insertAdjacentHTML("afterbegin", `<p class="muted">Укажите хост и порт.</p>`);
+    return;
+  }
+  const proxyId = String(Date.now());
+  state.library.proxies.unshift({
+    id: proxyId,
+    label: $("proxy-label").value.trim(),
+    type: $("proxy-type").value,
+    host,
+    port,
+    username: $("proxy-user").value.trim(),
+    password: $("proxy-pass").value,
+  });
+  state.settings = await window.desktop.saveSettings({
+    ...collectSettings(),
+    defaultProxyId: proxyId,
+  });
+  $("proxy-label").value = "";
+  $("proxy-host").value = "";
+  $("proxy-port").value = "";
+  $("proxy-user").value = "";
+  $("proxy-pass").value = "";
+  await persistLibrary();
+});
+
+document.body.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  if (action === "rescan-pool") {
+    inspectPoolItem(button.dataset.id).catch((error) => appendLog("log", error.message || String(error)));
+  }
+  if (action === "delete-folder") {
+    state.library.folders = state.library.folders.filter((item) => item.id !== button.dataset.id);
+    await persistLibrary();
+  }
+  if (action === "use-folder") {
+    addToPool(button.dataset.path);
+    showView("accounts");
+  }
+  if (action === "remove-pool") {
+    state.library.pool = (state.library.pool || []).filter((item) => item.id !== button.dataset.id);
+    await persistLibrary();
+  }
+  if (action === "delete-proxy") {
+    state.library.proxies = state.library.proxies.filter((item) => item.id !== button.dataset.id);
+    await persistLibrary();
+  }
+});
+$("win-min").addEventListener("click", () => window.desktop.minimize());
+$("win-max").addEventListener("click", () => window.desktop.maximize());
+$("win-close").addEventListener("click", () => window.desktop.close());
+
+window.desktop.onPoolUpdated((library) => {
+  state.library = library;
+  renderLists();
+});
+
+window.desktop.onLog((line) => appendLog("log", line));
+window.desktop.onBotLog((line) => appendLog("bot-log", line));
+window.desktop.onBotStatus((payload) => {
+  state.botRunning = Boolean(payload.running);
+  $("bot-state").textContent = state.botRunning ? "Запущен" : "Остановлен";
+  $("bot-toggle").textContent = state.botRunning ? "Остановить бота" : "Запустить бота";
+});
+
+boot().catch((error) => {
+  $("python-status").textContent = error.message || String(error);
+});

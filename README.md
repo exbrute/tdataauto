@@ -36,15 +36,19 @@ python -m tdataauto run --tdata /path/to/tdata --link "https://t.me/my_channel/4
 
 Переменные из `.env`: `SELL_MODE` (`convert` | `resell` | `both`), `RESELL_PRICE`, `KEEP_STARS`, `MAX_PAID_REACTION_BATCH`.
 
-## Telegram-бот
+## Telegram-бот (основной интерфейс)
 
 ```bash
 python -m tdataauto bot
 ```
 
-1. `/start`
-2. Ссылка на пост канала
-3. ZIP-архив с папкой `tdata`
+1. `/start` — клавиатура кнопок  
+2. **«Ссылка на пост»** — куда переводить ⭐  
+3. ZIP с `tdata` — автоскан и пул (несколько архивов подряд)  
+4. **«Запустить»** — продажа подарков и перевод звёзд по всему пулу  
+5. **«Пул»**, **«Очистить пул»**, **«Passcode»**, **«Статус»**, **«Отмена»**  
+
+Если Telegram недоступен напрямую, задайте `TDATA_PROXY=socks5://127.0.0.1:1080` в `.env` на сервере бота.
 
 ## Как это устроено
 
@@ -58,6 +62,28 @@ flowchart LR
   E --> G[SendPaidReaction на пост]
   F --> G
 ```
+
+## Приложение Star Flow (опционально)
+
+Desktop-версия с тем же движком `tdataauto`; основной сценарий — **Telegram-бот** выше.
+
+```bash
+cd desktop
+npm install
+npm start
+```
+
+Окно повторяет тёмную панель: карточки метрик, тепловая карта запусков, график звёзд и таблица аккаунтов. Python-пакет `tdataauto` остаётся движком — приложение вызывает `python -m tdataauto run`.
+
+Готовый Windows-файл собирается так:
+
+```bash
+cd desktop
+npm install
+npm run dist:win
+```
+
+На выходе `desktop/dist/StarFlow-0.1.1.exe`. Внутри уже есть Python, отдельно ставить его не нужно.
 
 ## Лицензия
 

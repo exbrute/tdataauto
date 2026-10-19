@@ -6,3 +6,6 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+desktop/node_modules/
+desktop/dist/
+desktop/build/

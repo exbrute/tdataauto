@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import urllib.parse
 from pathlib import Path
 
 from opentele.api import API, UseCurrentSession
@@ -24,11 +25,28 @@ def find_tdata_root(base: Path) -> Path:
     raise FileNotFoundError(f"Папка tdata не найдена в {base}")
 
 
+def parse_proxy(proxy_url: str | None) -> dict | None:
+    if not proxy_url:
+        return None
+    parsed = urllib.parse.urlparse(proxy_url.strip())
+    if parsed.scheme not in {"socks5", "socks4", "http"} or not parsed.hostname or not parsed.port:
+        raise RuntimeError("Прокси должен быть вида socks5://host:port или http://user:pass@host:port")
+    return {
+        "proxy_type": parsed.scheme,
+        "addr": parsed.hostname,
+        "port": parsed.port,
+        "username": urllib.parse.unquote(parsed.username) if parsed.username else None,
+        "password": urllib.parse.unquote(parsed.password) if parsed.password else None,
+        "rdns": True,
+    }
+
+
 async def client_from_tdata(
     tdata_path: Path,
     session_file: Path,
     *,
     passcode: str | None = None,
+    proxy_url: str | None = None,
 ) -> TelegramClient:
     tdesk = TDesktop(str(tdata_path), passcode=passcode)
     if not tdesk.isLoaded():
@@ -44,7 +62,29 @@ async def client_from_tdata(
         flag=UseCurrentSession,
         api=api,
     )
-    await client.connect()
+    proxy = parse_proxy(proxy_url)
+    if proxy:
+        client.set_proxy(proxy)
+        logger.info("Прокси %s://%s:%s", proxy["proxy_type"], proxy["addr"], proxy["port"])
+    else:
+        logger.warning(
+            "Прокси не задан (TDATA_PROXY). Если Telegram недоступен напрямую, "
+            "укажите SOCKS5 на вкладке «Прокси» и выберите его для пула."
+        )
+    if hasattr(client, "_connection_retries"):
+        client._connection_retries = 2
+    if hasattr(client, "_timeout"):
+        client._timeout = 10
+    try:
+        await client.connect()
+    except (ConnectionError, OSError, TimeoutError) as exc:
+        hint = (
+            "Не удалось подключиться к Telegram через прокси. Проверьте тип (SOCKS5), хост и порт."
+            if proxy
+            else "Не удалось подключиться к Telegram. Скорее всего нужен SOCKS5/HTTP прокси "
+            "(вкладка «Прокси» → выберите в «Прокси для пула» на «Аккаунтах»)."
+        )
+        raise ConnectionError(f"{hint} ({exc})") from exc
     if not await client.is_user_authorized():
         await client.disconnect()
         raise RuntimeError("Сессия из tdata не авторизована в Telegram.")

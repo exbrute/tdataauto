@@ -69,6 +69,19 @@ async def _iter_saved_gifts(client, peer) -> Iterable[types.SavedStarGift]:
         offset = page.next_offset
 
 
+async def count_saved_gifts(client) -> dict[str, int]:
+    me = await client.get_me()
+    peer = await client.get_input_entity(me)
+    nft = 0
+    regular = 0
+    async for saved in _iter_saved_gifts(client, peer):
+        if _is_unique(saved):
+            nft += 1
+        else:
+            regular += 1
+    return {"nft": nft, "regular": regular, "total": nft + regular}
+
+
 async def process_gifts(
     client,
     *,

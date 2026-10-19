@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Star Flow</title>
+    <link rel="stylesheet" href="../../node_modules/@fontsource/plus-jakarta-sans/400.css" />
+    <link rel="stylesheet" href="../../node_modules/@fontsource/plus-jakarta-sans/500.css" />
+    <link rel="stylesheet" href="../../node_modules/@fontsource/plus-jakarta-sans/600.css" />
+    <link rel="stylesheet" href="../../node_modules/@fontsource/plus-jakarta-sans/700.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 16.5 12 5l8 11.5H4Z" fill="white"/></svg>
+          </div>
+          <span>Star Flow</span>
+        </div>
+
+        <nav class="nav" id="nav">
+          <button class="nav-btn active" data-view="accounts" type="button">
+            <svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm6 1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM4 19c.4-2.6 2.5-4 5-4s4.6 1.4 5 4"/></svg>
+            Аккаунты
+          </button>
+          <button class="nav-btn" data-view="sessions" type="button">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            Сессии
+          </button>
+          <button class="nav-btn" data-view="folders" type="button">
+            <svg viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10Z"/></svg>
+            Папки
+          </button>
+          <button class="nav-btn" data-view="proxies" type="button">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.2 2.4 3.3 5.1 3.3 8S14.2 17.6 12 20c-2.2-2.4-3.3-5.1-3.3-8S9.8 6.4 12 4Z"/></svg>
+            Прокси
+          </button>
+          <button class="nav-btn" data-view="dashboard" type="button">
+            <svg viewBox="0 0 24 24"><path d="M5 19V10M12 19V5M19 19v-7"/></svg>
+            Статистика
+          </button>
+          <button class="nav-btn" data-view="logs" type="button">
+            <svg viewBox="0 0 24 24"><path d="M8 7h11M8 12h11M8 17h11"/><path d="M4 7h.01M4 12h.01M4 17h.01"/></svg>
+            Логи
+          </button>
+          <button class="nav-btn" data-view="extra" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/></svg>
+            Дополнительно
+          </button>
+        </nav>
+
+        <div class="nav nav-bottom">
+          <button class="nav-btn" data-view="settings" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="M19.4 13.5a7.7 7.7 0 0 0 .1-1.5 7.7 7.7 0 0 0-.1-1.5l2-1.5-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.6a7.6 7.6 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.5a7.7 7.7 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.6a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5Z"/></svg>
+            Настройки
+          </button>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <label class="search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+            <input id="search" type="search" placeholder="Поиск по запускам" />
+          </label>
+          <div class="top-meta">
+            <span id="today"></span>
+            <button class="icon-btn" id="bell" type="button" title="События">
+              <svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2H4.5L6 16Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+              <i id="bell-dot" hidden></i>
+            </button>
+            <div class="avatar" title="Star Flow">SF</div>
+            <div class="window-controls">
+              <button type="button" id="win-min" aria-label="Свернуть">–</button>
+              <button type="button" id="win-max" aria-label="Развернуть">□</button>
+              <button type="button" id="win-close" aria-label="Закрыть">×</button>
+            </div>
+          </div>
+        </header>
+
+        <section class="view" id="view-dashboard" hidden>
+          <div class="metrics" id="metrics"></div>
+          <div class="mid">
+            <article class="card">
+              <div class="card-head">
+                <h2>Запуски по времени</h2>
+                <div class="legend" id="heat-legend"></div>
+              </div>
+              <div class="heatmap" id="heatmap"></div>
+            </article>
+            <article class="card">
+              <div class="card-head">
+                <h2>Звёзды по запускам</h2>
+                <div class="legend">
+                  <span><i class="swatch orange"></i> Отправлено</span>
+                  <span><i class="swatch gray"></i> Остаток</span>
+                </div>
+              </div>
+              <div class="chart" id="chart"></div>
+            </article>
+          </div>
+          <div class="bottom">
+            <article class="card">
+              <div class="card-head">
+                <h2>Последние аккаунты</h2>
+                <button class="link" type="button" data-jump="accounts">Все</button>
+              </div>
+              <div class="account-grid" id="account-grid"></div>
+            </article>
+            <article class="card">
+              <div class="card-head">
+                <h2>Последние запуски</h2>
+                <button class="link" type="button" data-jump="logs">Все</button>
+              </div>
+              <div class="table-wrap" id="dash-table"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-accounts">
+          <div class="split">
+            <article class="card drop-card" id="drop">
+              <div class="drop-mark">ZIP</div>
+              <h2>Пул tdata</h2>
+              <p>Добавляйте несколько ZIP или папок — они обрабатываются одним запуском. Внутри должны быть <b>key_datas</b> и hex-каталоги.</p>
+              <div class="row">
+                <button class="btn" type="button" id="pick-folder">Добавить папку</button>
+                <button class="btn ghost" type="button" id="pick-zip">Добавить ZIP</button>
+              </div>
+              <div class="card-head" style="margin-top:1rem">
+                <h2>В пуле</h2>
+                <span class="muted" id="pool-count">0 аккаунтов</span>
+              </div>
+              <div class="stack" id="pool-list"></div>
+            </article>
+            <article class="card form-card">
+              <h2>Параметры продажи</h2>
+              <label class="field">Ссылка на пост канала
+                <input id="run-link" type="url" placeholder="https://t.me/channel/32" />
+              </label>
+              <div class="link-preview" id="link-preview">Пост не распознан</div>
+              <label class="field">Режим
+                <select id="run-mode">
+                  <option value="both">Обычные → звёзды, NFT → витрина</option>
+                  <option value="convert">Только конвертация в звёзды</option>
+                  <option value="resell">Только перепродажа NFT</option>
+                </select>
+              </label>
+              <div class="cols">
+                <label class="field">Цена NFT, ⭐
+                  <input id="run-price" type="number" min="0" step="1" />
+                </label>
+                <label class="field">Оставить на балансе
+                  <input id="run-keep" type="number" min="0" step="1" />
+                </label>
+              </div>
+              <label class="field">Прокси для пула (скан и запуск)
+                <select id="run-proxy"><option value="">Без прокси</option></select>
+              </label>
+              <p class="muted">Если в логе таймаут к 149.154.* — Telegram без прокси недоступен. Добавьте SOCKS5 на «Прокси» и выберите здесь (или оставьте один прокси — подставится сам).</p>
+              <label class="field">Локальный пароль tdata
+                <input id="run-pass" type="password" placeholder="Если в Telegram Desktop задан passcode" />
+              </label>
+              <button class="btn primary" type="button" id="run-btn">Запустить пул</button>
+            </article>
+          </div>
+          <article class="card log-card">
+            <div class="card-head">
+              <h2>Журнал текущего запуска</h2>
+              <span class="muted" id="run-state">Ожидание</span>
+            </div>
+            <pre id="log"></pre>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>Обработанные аккаунты</h2></div>
+            <div class="table-wrap" id="accounts-table"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-sessions" hidden>
+          <article class="card">
+            <div class="card-head">
+              <h2>Загруженные аккаунты</h2>
+              <button class="link" type="button" id="refresh-sessions">Пересканировать всё</button>
+            </div>
+            <p class="muted">При добавлении tdata в пул профиль сканируется автоматически: звёзды, NFT, админ-чаты/каналы, Premium и боты из @BotFather.</p>
+            <div class="table-wrap" id="sessions-table"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-folders" hidden>
+          <article class="card">
+            <div class="card-head">
+              <h2>Папки tdata</h2>
+              <button class="btn" type="button" id="add-folder">Добавить папку</button>
+            </div>
+            <div class="stack" id="folder-list"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-proxies" hidden>
+          <div class="split">
+            <article class="card form-card">
+              <h2>Новый прокси</h2>
+              <label class="field">Название
+                <input id="proxy-label" placeholder="Домашний SOCKS" />
+              </label>
+              <div class="cols">
+                <label class="field">Тип
+                  <select id="proxy-type">
+                    <option value="socks5">SOCKS5</option>
+                    <option value="socks4">SOCKS4</option>
+                    <option value="http">HTTP</option>
+                  </select>
+                </label>
+                <label class="field">Порт
+                  <input id="proxy-port" type="number" min="1" max="65535" placeholder="1080" />
+                </label>
+              </div>
+              <label class="field">Хост
+                <input id="proxy-host" placeholder="127.0.0.1" />
+              </label>
+              <div class="cols">
+                <label class="field">Логин
+                  <input id="proxy-user" />
+                </label>
+                <label class="field">Пароль
+                  <input id="proxy-pass" type="password" />
+                </label>
+              </div>
+              <button class="btn primary" type="button" id="add-proxy">Сохранить прокси</button>
+            </article>
+            <article class="card">
+              <div class="card-head"><h2>Список</h2></div>
+              <div class="stack" id="proxy-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-logs" hidden>
+          <article class="card log-card">
+            <div class="card-head">
+              <h2>Логи запусков</h2>
+              <button class="link" type="button" id="clear-history">Очистить</button>
+            </div>
+            <p class="muted">Сводка по всем запускам: загруженные аккаунты, списанные звёзды, NFT на витрине и конвертированные подарки.</p>
+            <pre id="logs-console"></pre>
+          </article>
+        </section>
+
+        <section class="view" id="view-extra" hidden>
+          <div class="metrics" id="gift-metrics"></div>
+          <article class="card form-card narrow">
+            <h2>Пост и режим продажи</h2>
+            <p class="muted">На канале должны быть включены платные реакции. Обычные подарки конвертируются в Stars сразу, NFT выставляются на витрину.</p>
+            <label class="field">Ссылка
+              <input id="channel-link" type="url" placeholder="https://t.me/channel/32" />
+            </label>
+            <div class="link-preview" id="channel-preview"></div>
+            <button class="btn primary" type="button" id="save-channel">Сохранить пост</button>
+          </article>
+        </section>
+
+        <section class="view" id="view-settings" hidden>
+          <div class="split">
+            <article class="card form-card">
+              <h2>Telegram API и бот</h2>
+              <p class="muted">Сессия tdata открывается официальным API Telegram Desktop. Свои API ID и hash нужны, если вы также поднимаете бота приёма архивов.</p>
+              <label class="field">API ID
+                <input id="set-api-id" inputmode="numeric" />
+              </label>
+              <label class="field">API hash
+                <input id="set-api-hash" type="password" />
+              </label>
+              <label class="field">Токен бота
+                <input id="set-token" type="password" placeholder="123456:ABC..." />
+              </label>
+              <label class="field">Пакет звёзд за один вызов
+                <input id="set-batch" type="number" min="1" step="1" />
+              </label>
+              <div class="row">
+                <button class="btn primary" type="button" id="save-settings">Сохранить</button>
+                <button class="btn" type="button" id="bot-toggle">Запустить бота</button>
+              </div>
+              <p class="muted" id="python-status"></p>
+            </article>
+            <article class="card log-card">
+              <div class="card-head"><h2>Лог бота</h2><span class="muted" id="bot-state">Остановлен</span></div>
+              <pre id="bot-log"></pre>
+            </article>
+          </div>
+        </section>
+
+      </div>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>
