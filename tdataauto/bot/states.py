@@ -1,6 +1,6 @@
 from aiogram.fsm.state import State, StatesGroup
 
 
-class UploadFlow(StatesGroup):
+class BotFlow(StatesGroup):
     waiting_link = State()
-    waiting_archive = State()
+    ready = State()

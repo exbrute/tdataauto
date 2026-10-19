@@ -36,15 +36,20 @@ python -m tdataauto run --tdata /path/to/tdata --link "https://t.me/my_channel/4
 
 Переменные из `.env`: `SELL_MODE` (`convert` | `resell` | `both`), `RESELL_PRICE`, `KEEP_STARS`, `MAX_PAID_REACTION_BATCH`.
 
-## Telegram-бот
+## Telegram-бот (основной интерфейс)
 
 ```bash
 python -m tdataauto bot
 ```
 
-1. `/start`
-2. Ссылка на пост канала
-3. ZIP-архив с папкой `tdata`
+1. `/start` — подсказки  
+2. `/link https://t.me/channel/123` — пост для перевода ⭐ (или `CHANNEL_POST_URL` в `.env`)  
+3. ZIP с `tdata` — **автоскан**: звёзды, NFT, админ-чаты/каналы, Premium, боты @BotFather; аккаунт попадает в **пул**  
+4. Можно прислать **несколько ZIP** подряд  
+5. `/run` — продажа подарков и перевод звёзд на пост для **всего пула**  
+6. `/pool`, `/clearpool`, `/passcode`, `/status`  
+
+Если Telegram недоступен напрямую, задайте `TDATA_PROXY=socks5://127.0.0.1:1080` в `.env` на сервере бота.
 
 ## Как это устроено
 
@@ -59,9 +64,9 @@ flowchart LR
   F --> G
 ```
 
-## Приложение Star Flow
+## Приложение Star Flow (опционально)
 
-Тот же сценарий в окне Electron: обзор запусков, выбор `tdata`, продажа подарков и отправка звёзд на пост.
+Desktop-версия с тем же движком `tdataauto`; основной сценарий — **Telegram-бот** выше.
 
 ```bash
 cd desktop
